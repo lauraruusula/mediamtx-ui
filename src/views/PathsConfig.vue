@@ -18,6 +18,7 @@
           @change="autoRefreshCtrl.toggle"
         />
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
+        <el-button :icon="Download" @click="exportCsvData">Export</el-button>
         <el-button type="primary" :icon="Plus" @click="showAddDialog">Add Path</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
@@ -25,6 +26,8 @@
     <p class="page-subtitle">
       Define sources, authentication, and recording rules for each path. Changes apply immediately.
     </p>
+
+    <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
 
     <el-card shadow="hover">
       <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
@@ -288,9 +291,12 @@ import { usePagination } from '@/composables/usePagination'
 import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
+import { useListError } from '@/composables/useListError'
+import { exportCsv } from '@/composables/useCsvExport'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { Refresh, Search, Plus, Edit, Delete, Download } from '@element-plus/icons-vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 
 const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
@@ -436,22 +442,47 @@ const handleDelete = async (name: string) => {
   }
 }
 
-const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage))
+const pagination = usePagination(
+  (page, itemsPerPage) => store.fetchList(page, itemsPerPage),
+  20,
+  'pagesize:path-configs'
+)
 const lastUpdated = useLastUpdated()
+const { error, run } = useListError()
 
 const loadData = async () => {
-  if (search.value.trim()) {
-    await store.fetchList(0, 1000)
-  } else {
-    await pagination.load()
-  }
-  lastUpdated.markUpdated()
+  await run(async () => {
+    if (search.value.trim()) {
+      await store.fetchList(0, 1000)
+    } else {
+      await pagination.load()
+    }
+    lastUpdated.markUpdated()
+  }, 'Failed to load path configs')
 }
 
-useSearchableList(search, () => loadData().catch(() => {}))
-const autoRefreshCtrl = useAutoRefresh(loadData)
+const exportCsvData = () => {
+  exportCsv(
+    `path-configs-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Path Name', 'Source', 'On Demand', 'Protected', 'Recording'],
+    filteredList.value.map((r: any) => [
+      r.name,
+      r.source || '',
+      r.sourceOnDemand ? 'Yes' : 'No',
+      r.publishUser || r.readUser ? 'Yes' : 'No',
+      r.record ? 'Yes' : 'No'
+    ])
+  )
+}
+
+useSearchableList(search, () => loadData())
+const autoRefreshCtrl = useAutoRefresh(
+  loadData,
+  AUTO_REFRESH_INTERVAL_MS,
+  'autorefresh:path-configs'
+)
 onMounted(() => {
-  loadData().catch(() => {})
+  loadData()
 })
 </script>
 

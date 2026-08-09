@@ -18,14 +18,23 @@
           @change="autoRefreshCtrl.toggle"
         />
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
+        <el-button :icon="Download" @click="exportCsvData">Export</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
     <p class="page-subtitle">
       Raw TCP-level RTSP connections. Read-only — see RTSP Sessions to disconnect a client.
     </p>
+    <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
+
     <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
+      <el-table
+        v-loading="store.loading"
+        :data="filteredList"
+        style="width: 100%"
+        :default-sort="sort.defaultSort"
+        @sort-change="sort.onSortChange"
+      >
         <el-table-column prop="id" label="ID" width="280" show-overflow-tooltip />
         <el-table-column label="Remote Address" prop="remoteAddr" min-width="160" />
         <el-table-column label="Tunnel" prop="tunnel" width="100" />
@@ -73,33 +82,65 @@ import { usePagination } from '@/composables/usePagination'
 import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
+import { useListError } from '@/composables/useListError'
+import { useTableSort } from '@/composables/useTableSort'
+import { exportCsv } from '@/composables/useCsvExport'
 import { formatBytes, formatDate } from '@/composables/useFormatters'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh, Search, Download } from '@element-plus/icons-vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import type { APIRTSPConn } from '@/types/api'
 
 const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = useRtspConnStore()
-const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage))
+const pagination = usePagination(
+  (page, itemsPerPage) => store.fetchList(page, itemsPerPage),
+  20,
+  'pagesize:rtsp-connections'
+)
 const lastUpdated = useLastUpdated()
 const search = ref('')
+const { error, run } = useListError()
+const sort = useTableSort('sort:rtsp-connections')
 
 const filteredList = computed(() =>
   filterList(store.list, search.value, (c: APIRTSPConn) => c.id + ' ' + (c.remoteAddr || ''))
 )
 
 const loadData = async () => {
-  if (search.value.trim()) {
-    await store.fetchList(0, 1000)
-  } else {
-    await pagination.load()
-  }
-  lastUpdated.markUpdated()
+  await run(async () => {
+    if (search.value.trim()) {
+      await store.fetchList(0, 1000)
+    } else {
+      await pagination.load()
+    }
+    lastUpdated.markUpdated()
+  }, 'Failed to load RTSP connections')
 }
 
-useSearchableList(search, () => loadData().catch(() => {}))
-const autoRefreshCtrl = useAutoRefresh(loadData)
+useSearchableList(search, () => loadData())
+
+const exportCsvData = () => {
+  exportCsv(
+    `rtsp-connections-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['ID', 'Remote Address', 'Tunnel', 'Inbound', 'Outbound', 'Created'],
+    filteredList.value.map(c => [
+      c.id,
+      c.remoteAddr || '',
+      c.tunnel || '',
+      c.inboundBytes || 0,
+      c.outboundBytes || 0,
+      formatDate(c.created)
+    ])
+  )
+}
+
+const autoRefreshCtrl = useAutoRefresh(
+  loadData,
+  AUTO_REFRESH_INTERVAL_MS,
+  'autorefresh:rtsp-connections'
+)
 onMounted(() => {
-  loadData().catch(() => {})
+  loadData()
 })
 </script>

@@ -5,6 +5,8 @@ import { useSystemStore } from './stores/system'
 import { useActivityStore } from './stores/activity'
 import { useRoute } from 'vue-router'
 import { formatUptime, formatRelativeTime, formatVersion } from './composables/useFormatters'
+import { getPaths } from './api/system'
+import CommandPalette from './components/CommandPalette.vue'
 import {
   VideoCamera,
   Odometer,
@@ -22,7 +24,8 @@ import {
   Expand,
   Fold,
   Sunny,
-  Moon
+  Moon,
+  Search
 } from '@element-plus/icons-vue'
 
 const isCollapse = ref(false)
@@ -32,6 +35,7 @@ const themeStore = useThemeStore()
 const systemStore = useSystemStore()
 const activityStore = useActivityStore()
 const appVersion = __APP_VERSION__
+const paletteVisible = ref(false)
 
 const toggleSidebar = () => {
   isCollapse.value = !isCollapse.value
@@ -44,14 +48,57 @@ const checkIsMobile = () => {
   }
 }
 
+const openPalette = () => {
+  paletteVisible.value = true
+}
+
+const onGlobalKeydown = (e: KeyboardEvent) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    paletteVisible.value = true
+  }
+}
+
+// Lightweight server-alert poller: MediaMTX has no push events, so we poll the
+// paths endpoint and surface online/offline transitions in the activity bell.
+let previousOnline: Record<string, boolean> = {}
+let alertTimer: ReturnType<typeof setInterval> | null = null
+
+const checkPathAlerts = async () => {
+  if (document.hidden) return
+  try {
+    const res = (await getPaths(0, 1000)) as { items?: { name: string; online: boolean }[] }
+    const current: Record<string, boolean> = {}
+    for (const p of res.items || []) current[p.name] = p.online
+    const names = new Set([...Object.keys(previousOnline), ...Object.keys(current)])
+    for (const name of names) {
+      const was = previousOnline[name]
+      const now = current[name]
+      if (was !== undefined && now !== undefined && was !== now) {
+        activityStore.log(
+          now ? `Path "${name}" came online` : `Path "${name}" went offline`,
+          now ? 'success' : 'error'
+        )
+      }
+    }
+    previousOnline = current
+  } catch {
+    // Server unreachable — skip this round
+  }
+}
+
 onMounted(() => {
   checkIsMobile()
   window.addEventListener('resize', checkIsMobile)
+  window.addEventListener('keydown', onGlobalKeydown)
   systemStore.fetchInfo().catch(() => {})
+  alertTimer = setInterval(checkPathAlerts, 15000)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', checkIsMobile)
+  window.removeEventListener('keydown', onGlobalKeydown)
+  if (alertTimer) clearInterval(alertTimer)
 })
 
 watch(
@@ -190,6 +237,12 @@ watch(
           <span class="header-title">{{ $route.meta.title || 'MediaMTX' }}</span>
         </div>
         <div class="header-right">
+          <el-tooltip content="Quick search (⌘K)" placement="bottom">
+            <button class="icon-btn" aria-label="Quick search" @click="openPalette">
+              <el-icon><Search /></el-icon>
+            </button>
+          </el-tooltip>
+
           <el-tooltip
             v-if="systemStore.info"
             :content="
@@ -270,6 +323,8 @@ watch(
         </router-view>
       </main>
     </div>
+
+    <CommandPalette v-model:visible="paletteVisible" />
   </div>
 </template>
 

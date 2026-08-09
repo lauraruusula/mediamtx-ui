@@ -12,12 +12,19 @@
           style="width: 200px"
           :prefix-icon="Search"
         />
+        <el-select v-model="statusFilter" style="width: 130px" aria-label="Filter by status">
+          <el-option label="All statuses" value="all" />
+          <el-option label="Online" value="online" />
+          <el-option label="Available" value="available" />
+          <el-option label="Offline" value="offline" />
+        </el-select>
         <el-switch
           v-model="autoRefreshCtrl.active.value"
           :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
           @change="autoRefreshCtrl.toggle"
         />
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
+        <el-button :icon="Download" @click="exportCsvData">Export</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
@@ -25,8 +32,16 @@
       Live status of every configured path — who's online, publishing, and being watched right now.
     </p>
 
+    <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
+
     <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
+      <el-table
+        v-loading="store.loading"
+        :data="filteredList"
+        style="width: 100%"
+        :default-sort="sort.defaultSort"
+        @sort-change="sort.onSortChange"
+      >
         <el-table-column prop="name" label="Path Name" min-width="180" show-overflow-tooltip />
         <el-table-column
           label="Status"
@@ -110,9 +125,9 @@
       </el-table>
       <el-empty
         v-if="!store.loading && filteredList.length === 0"
-        :description="search ? `No paths match “${search}”` : 'No paths yet'"
+        :description="emptyDescription"
       />
-      <div v-if="!search && store.itemCount > 0" class="pagination-bar">
+      <div v-if="!search && statusFilter === 'all' && store.itemCount > 0" class="pagination-bar">
         <el-pagination
           v-model:current-page="pagination.page.value"
           v-model:page-size="pagination.pageSize.value"
@@ -126,7 +141,22 @@
       </div>
     </el-card>
 
-    <el-drawer v-model="drawerVisible" :title="currentPath?.name" size="450px">
+    <el-drawer v-model="drawerVisible" size="450px">
+      <template #header>
+        <div class="drawer-header">
+          <span class="drawer-title">{{ currentPath?.name }}</span>
+          <el-button
+            v-if="currentPath?.online"
+            type="success"
+            size="small"
+            plain
+            :icon="VideoPlay"
+            @click="playFromDrawer"
+          >
+            Play
+          </el-button>
+        </div>
+      </template>
       <el-descriptions v-if="currentPath" :column="1" border>
         <el-descriptions-item label="Path Name">{{ currentPath.name }}</el-descriptions-item>
         <el-descriptions-item label="Config Name">{{ currentPath.confName }}</el-descriptions-item>
@@ -155,7 +185,16 @@
           <div v-for="u in streamUrls" :key="u.protocol" class="stream-link-row">
             <span class="stream-link-label">{{ u.label }}</span>
             <code class="stream-link-url">{{ u.url }}</code>
-            <el-button text type="primary" size="small" :icon="DocumentCopy" @click="copyUrl(u)" />
+            <el-tooltip content="Copy URL" placement="top">
+              <el-button
+                text
+                type="primary"
+                size="small"
+                :icon="DocumentCopy"
+                aria-label="Copy URL"
+                @click="copyUrl(u)"
+              />
+            </el-tooltip>
           </div>
         </div>
       </template>
@@ -163,7 +202,7 @@
       <template v-if="currentPath?.tracks2?.length">
         <h4 style="margin: 16px 0 8px">Tracks</h4>
         <el-tag v-for="(t, i) in currentPath.tracks2" :key="i" style="margin: 0 4px 4px 0">{{
-          t.codec
+          trackLabel(t)
         }}</el-tag>
       </template>
       <template v-if="currentPath?.readers?.length">
@@ -173,7 +212,7 @@
           :key="i"
           type="success"
           style="margin: 0 4px 4px 0"
-          >{{ r.type }}</el-tag
+          >{{ formatSourceType(r.type) }}</el-tag
         >
       </template>
     </el-drawer>
@@ -200,19 +239,23 @@ import { usePagination } from '@/composables/usePagination'
 import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
+import { useListError } from '@/composables/useListError'
+import { useTableSort } from '@/composables/useTableSort'
+import { exportCsv } from '@/composables/useCsvExport'
 import {
   buildStreamUrls,
-  portsFromConfig,
+  streamConfigFromConfig,
   type StreamUrl,
-  type StreamUrlPorts
+  type StreamUrlConfig
 } from '@/composables/useStreamUrls'
 import { copyToClipboard } from '@/composables/useClipboard'
 import { formatBytes, formatSourceType } from '@/composables/useFormatters'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search, DocumentCopy, VideoPlay, View } from '@element-plus/icons-vue'
+import { Refresh, Search, Download, DocumentCopy, VideoPlay, View } from '@element-plus/icons-vue'
 import StreamPlayer from '@/components/StreamPlayer.vue'
 import CopyLinkButton from '@/components/CopyLinkButton.vue'
-import type { APIPath } from '@/types/api'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
+import type { APIPath, APIPathTrack } from '@/types/api'
 
 const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
@@ -222,35 +265,88 @@ const route = useRoute()
 // Prefilled when arriving via a "view this path" link from a connections/sessions
 // table (e.g. /paths?q=mystream) so the two views stay cross-navigable.
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const statusFilter = ref<'all' | 'online' | 'available' | 'offline'>('all')
 
 const drawerVisible = ref(false)
 const currentPath = ref<APIPath | null>(null)
 const playerVisible = ref(false)
 const playingPath = ref('')
-const ports = ref<StreamUrlPorts>({})
+const streamCfg = ref<StreamUrlConfig>({ ports: {}, enabled: {} })
 const portsLoaded = ref(false)
+const { error, run } = useListError()
+const sort = useTableSort('sort:paths')
 
 // Use the live global config so stream links reflect real server ports.
 configStore
   .ensureLoaded()
   .then(cfg => {
-    ports.value = portsFromConfig(cfg)
+    streamCfg.value = streamConfigFromConfig(cfg)
     portsLoaded.value = true
   })
   .catch(() => {})
 
-// Search matches across the full path list — while a term is active we fetch
-// everything (see loadData) so results aren't limited to the current page.
-const filteredList = computed(() => filterList(store.list, search.value, (p: APIPath) => p.name))
+// When the admin UI is served over HTTPS, assume HLS/WHEP are behind the same
+// TLS edge and advertise https links.
+const httpScheme = window.location.protocol === 'https:' ? 'https' : 'http'
+
+const statusMatches = (p: APIPath) =>
+  statusFilter.value === 'all'
+    ? true
+    : statusFilter.value === 'online'
+      ? p.online
+      : statusFilter.value === 'available'
+        ? !p.online && p.available
+        : !p.online && !p.available
+
+// Search + status filter. While either is active we fetch the whole list (see
+// loadData) so results aren't limited to the current page.
+const filteredList = computed(() =>
+  filterList(store.list, search.value, (p: APIPath) => p.name).filter(statusMatches)
+)
+
+const emptyDescription = computed(() => {
+  if (search.value.trim()) return `No paths match “${search.value}”`
+  if (statusFilter.value !== 'all') return 'No paths match this status filter'
+  return 'No paths yet'
+})
 
 const streamUrls = computed(() =>
-  currentPath.value ? buildStreamUrls(currentPath.value.name, ports.value) : []
+  currentPath.value
+    ? buildStreamUrls(
+        currentPath.value.name,
+        streamCfg.value.ports,
+        streamCfg.value.enabled,
+        httpScheme
+      )
+    : []
 )
 
 const copyUrl = async (u: StreamUrl) => {
   const ok = await copyToClipboard(u.url)
   ElMessage[ok ? 'success' : 'error'](
     ok ? `Copied ${u.label} URL to clipboard` : 'Could not copy to clipboard'
+  )
+}
+
+const trackLabel = (t: APIPathTrack) => {
+  const bitrate = (t.codecProps as Record<string, unknown>)?.bitrate
+  const bitrateNum = typeof bitrate === 'number' ? bitrate : undefined
+  return bitrateNum ? `${t.codec} · ${formatBytes(bitrateNum)}/s` : t.codec
+}
+
+const exportCsvData = () => {
+  exportCsv(
+    `paths-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Path Name', 'Status', 'Source Type', 'Tracks', 'Readers', 'Inbound', 'Outbound'],
+    filteredList.value.map(p => [
+      p.name,
+      p.online ? 'Online' : p.available ? 'Available' : 'Offline',
+      p.source ? formatSourceType(p.source.type) : '-',
+      p.tracks2?.length || 0,
+      p.readers?.length || 0,
+      p.inboundBytes || 0,
+      p.outboundBytes || 0
+    ])
   )
 }
 
@@ -264,22 +360,35 @@ const openPlayer = (row: APIPath) => {
   playerVisible.value = true
 }
 
-const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage), 50)
+const playFromDrawer = () => {
+  if (!currentPath.value) return
+  playingPath.value = currentPath.value.name
+  playerVisible.value = true
+}
+
+const pagination = usePagination(
+  (page, itemsPerPage) => store.fetchList(page, itemsPerPage),
+  20,
+  'pagesize:paths'
+)
 const lastUpdated = useLastUpdated()
 
 const loadData = async () => {
-  // Searching covers the whole path list, not just the current page — this is
-  // also what makes the /paths?q= cross-links from connection views work.
-  if (search.value.trim()) {
-    await store.fetchList(0, 1000)
-  } else {
-    await pagination.load()
-  }
-  lastUpdated.markUpdated()
+  await run(async () => {
+    // Searching or filtering covers the whole path list, not just the current
+    // page — this is also what makes the /paths?q= cross-links work.
+    if (search.value.trim() || statusFilter.value !== 'all') {
+      await store.fetchList(0, 1000)
+    } else {
+      await pagination.load()
+    }
+    lastUpdated.markUpdated()
+  }, 'Failed to load paths')
 }
 
-useSearchableList(search, () => loadData().catch(() => {}))
-const autoRefreshCtrl = useAutoRefresh(loadData)
+useSearchableList(search, () => loadData())
+watch(statusFilter, () => loadData())
+const autoRefreshCtrl = useAutoRefresh(loadData, AUTO_REFRESH_INTERVAL_MS, 'autorefresh:paths')
 
 // Keep the search box in sync if the query changes while already on this page.
 watch(
@@ -290,11 +399,27 @@ watch(
 )
 
 onMounted(() => {
-  loadData().catch(() => {})
+  loadData()
 })
 </script>
 
 <style scoped>
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.drawer-title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .drawer-hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);

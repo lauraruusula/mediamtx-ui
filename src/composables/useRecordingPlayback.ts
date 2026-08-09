@@ -5,10 +5,10 @@ import type { APIRecordingSegment } from '@/types/api'
 const DEFAULT_PLAYBACK_PORT = 9996
 
 /**
- * Builds the playback-server URL for one recorded segment. `duration` isn't
- * provided by the /v3/recordings list API, so it's derived from the gap to
- * the next segment's start time when there is one. For the most recent
- * segment (no "next"), we fall back to a generous upper bound — the
+ * Builds the playback-server URL for one recorded segment. When the API
+ * provides a real `duration` it's used directly; otherwise it's derived from
+ * the gap to the next segment's start time when there is one. For the most
+ * recent segment (no "next"), we fall back to a generous upper bound — the
  * playback server serves only what actually exists on disk, so an
  * over-estimate is safe, just not exact.
  */
@@ -22,9 +22,11 @@ export function buildPlaybackUrl(
   const next = segments[index + 1]
   const startMs = new Date(segment.start).getTime()
 
-  const durationSeconds = next
+  const derived = next
     ? Math.max((new Date(next.start).getTime() - startMs) / 1000, 1)
     : fallbackDurationSeconds
+  const durationSeconds =
+    typeof segment.duration === 'number' && segment.duration > 0 ? segment.duration : derived
 
   const params = new URLSearchParams({
     path: pathName,

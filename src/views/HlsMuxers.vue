@@ -18,12 +18,21 @@
           @change="autoRefreshCtrl.toggle"
         />
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
+        <el-button :icon="Download" @click="exportCsvData">Export</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
     <p class="page-subtitle">HLS output muxers currently serving segments. Read-only.</p>
+    <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
+
     <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
+      <el-table
+        v-loading="store.loading"
+        :data="filteredList"
+        style="width: 100%"
+        :default-sort="sort.defaultSort"
+        @sort-change="sort.onSortChange"
+      >
         <el-table-column label="Path" min-width="200" show-overflow-tooltip>
           <template #default="{ row }"><PathLink :path="row.path" /></template>
         </el-table-column>
@@ -88,34 +97,61 @@ import { usePagination } from '@/composables/usePagination'
 import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
+import { useListError } from '@/composables/useListError'
+import { useTableSort } from '@/composables/useTableSort'
+import { exportCsv } from '@/composables/useCsvExport'
 import { formatBytes, formatDate } from '@/composables/useFormatters'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh, Search, Download } from '@element-plus/icons-vue'
 import PathLink from '@/components/PathLink.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import type { APIHLSMuxer } from '@/types/api'
 
 const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = useHlsMuxerStore()
-const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage))
+const pagination = usePagination(
+  (page, itemsPerPage) => store.fetchList(page, itemsPerPage),
+  20,
+  'pagesize:hls-muxers'
+)
 const lastUpdated = useLastUpdated()
 const search = ref('')
+const { error, run } = useListError()
+const sort = useTableSort('sort:hls-muxers')
 
 const filteredList = computed(() =>
   filterList(store.list, search.value, (m: APIHLSMuxer) => m.path || '')
 )
 
 const loadData = async () => {
-  if (search.value.trim()) {
-    await store.fetchList(0, 1000)
-  } else {
-    await pagination.load()
-  }
-  lastUpdated.markUpdated()
+  await run(async () => {
+    if (search.value.trim()) {
+      await store.fetchList(0, 1000)
+    } else {
+      await pagination.load()
+    }
+    lastUpdated.markUpdated()
+  }, 'Failed to load HLS muxers')
 }
 
-useSearchableList(search, () => loadData().catch(() => {}))
-const autoRefreshCtrl = useAutoRefresh(loadData)
+useSearchableList(search, () => loadData())
+
+const exportCsvData = () => {
+  exportCsv(
+    `hls-muxers-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Path', 'Outbound Traffic', 'Dropped Frames', 'Created', 'Last Request'],
+    filteredList.value.map(m => [
+      m.path || '',
+      m.outboundBytes || 0,
+      m.outboundFramesDiscarded || 0,
+      formatDate(m.created),
+      formatDate(m.lastRequest)
+    ])
+  )
+}
+
+const autoRefreshCtrl = useAutoRefresh(loadData, AUTO_REFRESH_INTERVAL_MS, 'autorefresh:hls-muxers')
 onMounted(() => {
-  loadData().catch(() => {})
+  loadData()
 })
 </script>

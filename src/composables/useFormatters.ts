@@ -56,6 +56,18 @@ export function formatState(state: string): string {
   return map[state] || state
 }
 
+export function formatDuration(seconds?: number | null): string {
+  if (seconds === undefined || seconds === null || !Number.isFinite(seconds)) return '-'
+  const total = Math.max(0, Math.round(seconds))
+  if (total < 60) return `${total}s`
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`
+  const h = Math.floor(m / 60)
+  const mm = m % 60
+  return mm ? `${h}h ${mm}m` : `${h}h`
+}
+
 export function formatSourceType(type: string): string {
   const map: Record<string, string> = {
     rtspSource: 'RTSP Source',
@@ -69,7 +81,11 @@ export function formatSourceType(type: string): string {
     srtConn: 'SRT Connection',
     srtSource: 'SRT Source',
     rtspsSession: 'RTSPS Session',
+    rtspsConn: 'RTSPS Connection',
+    rtspConn: 'RTSP Connection',
+    hlsMuxer: 'HLS Muxer',
     rpiCameraSource: 'RPi Camera',
+    rpiCameraSecondary: 'RPi Camera (Secondary)',
     redirect: 'Redirect',
     mpegtsSource: 'MPEG-TS Source',
     rtpSource: 'RTP Source'

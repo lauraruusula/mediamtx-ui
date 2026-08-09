@@ -22,9 +22,9 @@ import { Link, DocumentCopy } from '@element-plus/icons-vue'
 import { useConfigStore } from '@/stores/config'
 import {
   buildStreamUrls,
-  portsFromConfig,
+  streamConfigFromConfig,
   type StreamUrl,
-  type StreamUrlPorts
+  type StreamUrlConfig
 } from '@/composables/useStreamUrls'
 import { copyToClipboard } from '@/composables/useClipboard'
 
@@ -33,22 +33,29 @@ const props = defineProps<{
 }>()
 
 const configStore = useConfigStore()
-const ports = ref<StreamUrlPorts>({})
+const streamCfg = ref<StreamUrlConfig>({ ports: {}, enabled: {} })
 const portsLoaded = ref(false)
 
-// Use the live global config so the URLs reflect the server's real ports.
-// Falls back to defaults (with a caveat) if the config can't be fetched.
+// Use the live global config so the URLs reflect the server's real ports and
+// disabled protocols are hidden. Falls back to defaults (with a caveat) if the
+// config can't be fetched.
 onMounted(() => {
   configStore
     .ensureLoaded()
     .then(cfg => {
-      ports.value = portsFromConfig(cfg)
+      streamCfg.value = streamConfigFromConfig(cfg)
       portsLoaded.value = true
     })
     .catch(() => {})
 })
 
-const urls = computed(() => buildStreamUrls(props.pathName, ports.value))
+// When the admin UI itself is served over HTTPS, assume HLS/WHEP are behind the
+// same TLS edge and advertise https links.
+const httpScheme = window.location.protocol === 'https:' ? 'https' : 'http'
+
+const urls = computed(() =>
+  buildStreamUrls(props.pathName, streamCfg.value.ports, streamCfg.value.enabled, httpScheme)
+)
 
 async function handleCopy(u: StreamUrl) {
   const ok = await copyToClipboard(u.url)

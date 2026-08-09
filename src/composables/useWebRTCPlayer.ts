@@ -48,17 +48,19 @@ export function useWebRTCPlayer(
   }
 
   function supportsNonAdvertisedCodec(codec: string, fmtp?: string): Promise<boolean> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const tmpPc = new RTCPeerConnection({ iceServers: [] })
       tmpPc.addTransceiver('audio', { direction: 'recvonly' })
-      tmpPc.createOffer()
-        .then((offer) => {
+      tmpPc
+        .createOffer()
+        .then(offer => {
           if (!offer.sdp || offer.sdp.includes(` ${codec}`)) {
             throw new Error('already present or no sdp')
           }
           const sections = offer.sdp.split('m=audio')
-          const payloadTypes = sections.slice(1)
-            .map((s) => s.split('\r\n')[0].split(' ').slice(3))
+          const payloadTypes = sections
+            .slice(1)
+            .map(s => s.split('\r\n')[0].split(' ').slice(3))
             .reduce((prev, cur) => [...prev, ...cur], [])
           const pt = reservePayloadType(payloadTypes)
           const lines = sections[1].split('\r\n')
@@ -69,13 +71,18 @@ export function useWebRTCPlayer(
           offer.sdp = sections.join('m=audio')
           return tmpPc.setLocalDescription(offer)
         })
-        .then(() => tmpPc.setRemoteDescription(new RTCSessionDescription({
-          type: 'answer',
-          sdp: 'v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n'
-            + 'a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\r\n'
-            + `m=audio 9 UDP/TLS/RTP/SAVPF ${reservePayloadType([])}\r\n`
-            + 'c=IN IP4 0.0.0.0\r\na=ice-pwd:x\r\na=ice-ufrag:x\r\na=sendonly\r\na=rtcp-mux\r\n'
-        })))
+        .then(() =>
+          tmpPc.setRemoteDescription(
+            new RTCSessionDescription({
+              type: 'answer',
+              sdp:
+                'v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n' +
+                'a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\r\n' +
+                `m=audio 9 UDP/TLS/RTP/SAVPF ${reservePayloadType([])}\r\n` +
+                'c=IN IP4 0.0.0.0\r\na=ice-pwd:x\r\na=ice-ufrag:x\r\na=sendonly\r\na=rtcp-mux\r\n'
+            })
+          )
+        )
         .then(() => resolve(true))
         .catch(() => resolve(false))
         .finally(() => tmpPc.close())
@@ -120,13 +127,14 @@ export function useWebRTCPlayer(
       { ch: 5, mapping: '0,4,1,2,3', streams: 3, coupled: 2 },
       { ch: 6, mapping: '0,4,1,2,3,5', streams: 4, coupled: 2 },
       { ch: 7, mapping: '0,4,1,2,3,5,6', streams: 4, coupled: 4 },
-      { ch: 8, mapping: '0,6,1,4,5,2,3,7', streams: 5, coupled: 4 },
+      { ch: 8, mapping: '0,6,1,4,5,2,3,7', streams: 5, coupled: 4 }
     ]
     for (const c of configs) {
       const pt = reservePayloadType(payloadTypes)
       lines[0] += ` ${pt}`
       lines.splice(
-        lines.length - 1, 0,
+        lines.length - 1,
+        0,
         `a=rtpmap:${pt} multiopus/48000/${c.ch}`,
         `a=fmtp:${pt} channel_mapping=${c.mapping};num_streams=${c.streams};coupled_streams=${c.coupled}`,
         `a=rtcp-fb:${pt} transport-cc`
@@ -140,15 +148,21 @@ export function useWebRTCPlayer(
     for (const rate of ['8000', '16000', '48000']) {
       const pt = reservePayloadType(payloadTypes)
       lines[0] += ` ${pt}`
-      lines.splice(lines.length - 1, 0, `a=rtpmap:${pt} L16/${rate}/2`, `a=rtcp-fb:${pt} transport-cc`)
+      lines.splice(
+        lines.length - 1,
+        0,
+        `a=rtpmap:${pt} L16/${rate}/2`,
+        `a=rtcp-fb:${pt} transport-cc`
+      )
     }
     return lines.join('\r\n')
   }
 
   function editOffer(sdp: string): string {
     const sections = sdp.split('m=')
-    const payloadTypes = sections.slice(1)
-      .map((s) => s.split('\r\n')[0].split(' ').slice(3))
+    const payloadTypes = sections
+      .slice(1)
+      .map(s => s.split('\r\n')[0].split(' ').slice(3))
       .reduce((prev, cur) => [...prev, ...cur], [])
     for (let i = 1; i < sections.length; i++) {
       if (sections[i].startsWith('audio')) {
@@ -197,7 +211,7 @@ export function useWebRTCPlayer(
 
   function linkToIceServers(links: string | null): RTCIceServer[] {
     if (!links) return []
-    return links.split(', ').map((link) => {
+    return links.split(', ').map(link => {
       const m = link.match(
         /^<(.+?)>; rel="ice-server"(; username="(.*?)"; credential="(.*?)"; credential-type="password")?/i
       )
@@ -216,7 +230,10 @@ export function useWebRTCPlayer(
   function handleError(err: string) {
     if (closed) return
 
-    if (pc) { pc.close(); pc = null }
+    if (pc) {
+      pc.close()
+      pc = null
+    }
     offerData = null
     if (sessionUrl) {
       fetch(sessionUrl, { method: 'DELETE' }).catch(() => {})
@@ -247,7 +264,7 @@ export function useWebRTCPlayer(
     pc.addTransceiver('audio', { direction: 'recvonly' })
     pc.createDataChannel('')
 
-    pc.onicecandidate = (evt) => {
+    pc.onicecandidate = evt => {
       if (closed || !evt.candidate) return
       if (!sessionUrl) {
         queuedCandidates.push(evt.candidate)
@@ -263,7 +280,7 @@ export function useWebRTCPlayer(
       }
     }
 
-    pc.ontrack = (evt) => {
+    pc.ontrack = evt => {
       if (videoRef.value && evt.streams[0]) {
         videoRef.value.srcObject = evt.streams[0]
         videoRef.value.play().catch(() => {})
@@ -285,7 +302,7 @@ export function useWebRTCPlayer(
     const res = await fetch(currentUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },
-      body: offerSdp,
+      body: offerSdp
     })
 
     if (res.status === 404) throw new Error('stream not found')
@@ -315,14 +332,14 @@ export function useWebRTCPlayer(
     fetch(sessionUrl, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/trickle-ice-sdpfrag', 'If-Match': '*' },
-      body: generateSdpFragment(offerData, candidates),
+      body: generateSdpFragment(offerData, candidates)
     })
-      .then((res) => {
+      .then(res => {
         if (res.status !== 204) {
           throw new Error(`PATCH failed: ${res.status}`)
         }
       })
-      .catch((err) => handleError(err.toString()))
+      .catch(err => handleError(err.toString()))
   }
 
   async function start() {
@@ -342,11 +359,11 @@ export function useWebRTCPlayer(
     const tests: [string, string?][] = [
       ['pcma/8000/2'],
       ['multiopus/48000/6', 'channel_mapping=0,4,1,2,3,5;num_streams=4;coupled_streams=2'],
-      ['L16/48000/2'],
+      ['L16/48000/2']
     ]
     const results = await Promise.all(
       tests.map(([codec, fmtp]) =>
-        supportsNonAdvertisedCodec(codec, fmtp).then((r) => (r ? codec : null))
+        supportsNonAdvertisedCodec(codec, fmtp).then(r => (r ? codec : null))
       )
     )
     nonAdvertisedCodecs = results.filter((c): c is string => c !== null)
@@ -370,8 +387,14 @@ export function useWebRTCPlayer(
 
   function disconnect() {
     closed = true
-    if (restartTimeout) { clearTimeout(restartTimeout); restartTimeout = null }
-    if (pc) { pc.close(); pc = null }
+    if (restartTimeout) {
+      clearTimeout(restartTimeout)
+      restartTimeout = null
+    }
+    if (pc) {
+      pc.close()
+      pc = null
+    }
     if (sessionUrl) {
       fetch(sessionUrl, { method: 'DELETE' }).catch(() => {})
       sessionUrl = null
@@ -389,6 +412,6 @@ export function useWebRTCPlayer(
     state,
     error,
     connect,
-    disconnect,
+    disconnect
   }
 }

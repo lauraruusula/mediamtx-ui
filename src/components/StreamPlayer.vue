@@ -73,6 +73,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useWebRTCPlayer } from '@/composables/useWebRTCPlayer'
+import { useConfigStore } from '@/stores/config'
+import { streamConfigFromConfig, buildWhepUrl } from '@/composables/useStreamUrls'
 import {
   Loading,
   CircleCloseFilled,
@@ -92,19 +94,33 @@ const player = useWebRTCPlayer(videoEl)
 const showControls = ref(true)
 const isMuted = ref(true)
 const volume = ref(100)
+const configStore = useConfigStore()
+const whepPort = ref(8889)
 let controlsTimer: ReturnType<typeof setTimeout> | null = null
+
+// Resolve the live WebRTC port from the server's global config before the first
+// connect (falls back to the default 8889). Never rejects.
+const configReady = (async () => {
+  try {
+    const cfg = await configStore.ensureLoaded()
+    const { ports } = streamConfigFromConfig(cfg)
+    if (ports.webrtc) whepPort.value = ports.webrtc
+  } catch {
+    // keep the default port
+  }
+})()
 
 function getWhepUrl() {
   // Encode each path segment individually so names with special characters
   // (spaces, '?', '#', etc.) can't alter the URL's structure, while still
   // allowing legitimate hierarchical path names ("cam/1") to keep their slashes.
-  const encodedPath = props.pathName.split('/').map(encodeURIComponent).join('/')
-  if (props.whepBaseUrl) return `${props.whepBaseUrl}/${encodedPath}/whep`
-  // Use direct connection to MediaMTX WebRTC server (same host, port 8889).
-  // Vite proxy interferes with WHEP protocol headers, so we connect directly.
-  // Hardcode http like the stream-URL builders: the default WHEP server has no
-  // TLS, and an HTTPS-served admin UI would otherwise produce https:// targets.
-  return `http://${window.location.hostname}:8889/${encodedPath}/whep`
+  if (props.whepBaseUrl) {
+    const encodedPath = props.pathName.split('/').map(encodeURIComponent).join('/')
+    return `${props.whepBaseUrl}/${encodedPath}/whep`
+  }
+  // Direct connection to the MediaMTX WebRTC server (Vite proxy interferes with
+  // WHEP protocol headers). Always http — the WHEP server has no TLS support.
+  return buildWhepUrl(props.pathName, whepPort.value)
 }
 
 function startPlayer() {
@@ -162,11 +178,13 @@ watch(
   () => props.pathName,
   () => {
     player.disconnect()
-    startPlayer()
+    configReady.then(() => startPlayer())
   }
 )
 
-onMounted(startPlayer)
+onMounted(() => {
+  configReady.then(() => startPlayer())
+})
 
 onBeforeUnmount(() => {
   player.disconnect()

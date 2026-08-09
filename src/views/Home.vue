@@ -100,6 +100,10 @@
               <el-icon><Connection /></el-icon>
             </span>
             <span class="chart-card-title">Active Paths</span>
+            <span v-if="systemStore.paths.length > 8" class="chart-card-hint"
+              >showing {{ Math.min(systemStore.paths.length, 8) }} of
+              {{ systemStore.paths.length }} paths</span
+            >
           </div>
           <div style="display: flex; gap: 8px">
             <el-button text type="primary" @click="$router.push('/paths')">View All</el-button>
@@ -411,11 +415,17 @@ const refreshData = async () => {
 
 // Unlike other list views, auto refresh defaults on here — the dashboard is a
 // read-only overview, so there's no risk of it interrupting anyone mid-edit,
-// and it's what makes the bandwidth trend chart worth having.
-const autoRefreshCtrl = useAutoRefresh(refreshData)
+// and it's what makes the bandwidth trend chart worth having. The toggle is
+// persisted so a user who turns it off keeps it off.
+const autoRefreshCtrl = useAutoRefresh(
+  refreshData,
+  AUTO_REFRESH_INTERVAL_MS,
+  'autorefresh:home',
+  true
+)
 
 onMounted(() => {
   refreshData().catch(() => {})
-  autoRefreshCtrl.start()
+  if (autoRefreshCtrl.active.value) autoRefreshCtrl.start()
 })
 </script>

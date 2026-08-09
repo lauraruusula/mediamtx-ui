@@ -203,6 +203,7 @@ export interface APIHLSMuxer {
 // Recordings - GET /v3/recordings/list
 export interface APIRecordingSegment {
   start: string
+  duration?: number
 }
 
 export interface APIRecording {
