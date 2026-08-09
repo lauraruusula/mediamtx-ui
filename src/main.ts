@@ -1,7 +1,5 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/500.css'
@@ -37,18 +35,14 @@ use([
 // Initialize theme
 const savedTheme = localStorage.getItem('theme')
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-const theme = savedTheme || (prefersDark ? 'dark' : 'light')
+const theme =
+  savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : prefersDark ? 'dark' : 'light'
 document.documentElement.classList.add(theme)
 document.documentElement.setAttribute('data-theme', theme)
 
 const app = createApp(App)
 
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
-
 app.component('VChart', VChart)
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus)
 app.mount('#app')

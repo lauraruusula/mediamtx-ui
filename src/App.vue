@@ -4,7 +4,26 @@ import { useThemeStore } from './stores/theme'
 import { useSystemStore } from './stores/system'
 import { useActivityStore } from './stores/activity'
 import { useRoute } from 'vue-router'
-import { formatUptime, formatRelativeTime } from './composables/useFormatters'
+import { formatUptime, formatRelativeTime, formatVersion } from './composables/useFormatters'
+import {
+  VideoCamera,
+  Odometer,
+  VideoPlay,
+  Connection,
+  Setting,
+  Link,
+  Monitor,
+  User,
+  Film,
+  Files,
+  Promotion,
+  Folder,
+  Bell,
+  Expand,
+  Fold,
+  Sunny,
+  Moon
+} from '@element-plus/icons-vue'
 
 const isCollapse = ref(false)
 const isMobile = ref(false)
@@ -137,11 +156,21 @@ watch(
 
       <div v-if="!isCollapse" class="sidebar-footer">
         <span class="sidebar-footer-text">Admin Console v{{ appVersion }}</span>
+        <span
+          :class="['sidebar-footer-text', 'server-version', { offline: !systemStore.connected }]"
+        >
+          MediaMTX
+          {{
+            systemStore.connected && systemStore.info
+              ? formatVersion(systemStore.info.version)
+              : 'offline'
+          }}
+        </span>
         <a
           class="sidebar-footer-link"
           href="https://github.com/lauraruusula/mediamtx-ui"
           target="_blank"
-          rel="noopener"
+          rel="noopener noreferrer"
         >
           Report a bug or request a feature
         </a>
@@ -163,12 +192,19 @@ watch(
         <div class="header-right">
           <el-tooltip
             v-if="systemStore.info"
-            :content="`MediaMTX server · running for ${formatUptime(systemStore.info.started)}`"
+            :content="
+              systemStore.connected
+                ? `MediaMTX ${formatVersion(systemStore.info.version)} · running for ${formatUptime(
+                    systemStore.info.started
+                  )}`
+                : 'MediaMTX server is unreachable'
+            "
             placement="bottom"
           >
             <div class="server-pill">
               <span :class="['status-dot', { offline: !systemStore.connected }]" />
-              <span>{{ formatUptime(systemStore.info.started) }}</span>
+              <span v-if="systemStore.connected">{{ formatUptime(systemStore.info.started) }}</span>
+              <span v-else>Offline</span>
             </div>
           </el-tooltip>
 
@@ -263,6 +299,11 @@ watch(
   font-size: 11px;
   font-weight: 500;
   color: var(--el-text-color-secondary);
+}
+
+.server-version.offline {
+  color: var(--el-text-color-placeholder);
+  font-weight: 400;
 }
 
 .sidebar-footer-link {

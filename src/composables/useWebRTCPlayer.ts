@@ -383,8 +383,6 @@ export function useWebRTCPlayer(
     setState('idle')
   }
 
-  const isConnected = ref(false)
-
   onUnmounted(disconnect)
 
   return {
@@ -392,6 +390,5 @@ export function useWebRTCPlayer(
     error,
     connect,
     disconnect,
-    isConnected,
   }
 }

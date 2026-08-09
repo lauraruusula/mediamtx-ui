@@ -18,6 +18,9 @@
       <el-tabs v-model="activeTab" type="border-card">
         <!-- General config -->
         <el-tab-pane label="General" name="general">
+          <p class="tab-summary">
+            Logging and low-level network timeouts that apply server-wide across all protocols.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Log Level">
               <el-select v-model="configStore.config.logLevel" style="width: 100%">
@@ -55,6 +58,10 @@
 
         <!-- Auth config -->
         <el-tab-pane label="Auth" name="auth">
+          <p class="tab-summary">
+            How MediaMTX authenticates publishers and readers: internal credentials, an external
+            HTTP server, or JSON Web Tokens (JWT).
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Auth Method">
               <el-select v-model="configStore.config.authMethod" style="width: 100%">
@@ -80,6 +87,9 @@
 
         <!-- RTSP config -->
         <el-tab-pane label="RTSP" name="rtsp">
+          <p class="tab-summary">
+            RTSP/RTSPS listener settings and whether transport encryption is offered or enforced.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Enable RTSP">
               <el-switch v-model="configStore.config.rtsp" />
@@ -102,6 +112,9 @@
 
         <!-- RTMP config -->
         <el-tab-pane label="RTMP" name="rtmp">
+          <p class="tab-summary">
+            RTMP/RTMPS listener settings and whether transport encryption is offered or enforced.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Enable RTMP">
               <el-switch v-model="configStore.config.rtmp" />
@@ -124,6 +137,10 @@
 
         <!-- HLS config -->
         <el-tab-pane label="HLS" name="hls">
+          <p class="tab-summary">
+            HTTP Live Streaming listener, output variant (MPEG-TS, fMP4, or Low Latency), and how
+            the stream is split into segments.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Enable HLS">
               <el-switch v-model="configStore.config.hls" />
@@ -153,6 +170,10 @@
 
         <!-- WebRTC config -->
         <el-tab-pane label="WebRTC" name="webrtc">
+          <p class="tab-summary">
+            WebRTC (WHEP/WHIP) listener plus STUN/TURN servers and NAT traversal settings for
+            browser-based viewers.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Enable WebRTC">
               <el-switch v-model="configStore.config.webrtc" />
@@ -160,11 +181,34 @@
             <el-form-item label="WebRTC Address">
               <el-input v-model="configStore.config.webrtcAddress" />
             </el-form-item>
+            <el-form-item label="ICE Servers">
+              <el-input
+                v-model="iceServersText"
+                type="textarea"
+                :rows="3"
+                placeholder="stun:stun.l.google.com:19302"
+              />
+              <span class="form-hint"
+                >One server per line, e.g. stun:stun.example.com:3478 or
+                turn:turn.example.com:3478</span
+              >
+            </el-form-item>
+            <el-form-item label="Host NAT 1:1 IPs">
+              <el-input
+                v-model="configStore.config.webrtcICEHostNAT1To1IPs"
+                placeholder="e.g. 203.0.113.10"
+              />
+              <span class="form-hint">Public IP to advertise to remote peers when behind NAT</span>
+            </el-form-item>
           </el-form>
         </el-tab-pane>
 
         <!-- SRT config -->
         <el-tab-pane label="SRT" name="srt">
+          <p class="tab-summary">
+            SRT listener for secure, low-latency transport — commonly used to carry streams between
+            servers.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Enable SRT">
               <el-switch v-model="configStore.config.srt" />
@@ -177,6 +221,10 @@
 
         <!-- API config -->
         <el-tab-pane label="API" name="api">
+          <p class="tab-summary">
+            REST API listener that this dashboard uses to read and modify the server, plus optional
+            HTTPS.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Enable API">
               <el-switch v-model="configStore.config.api" />
@@ -192,6 +240,9 @@
 
         <!-- Recording config -->
         <el-tab-pane label="Recording" name="record">
+          <p class="tab-summary">
+            Server-wide recording defaults. Individual paths can override these in Path Config.
+          </p>
           <el-form :model="configStore.config" label-width="180px">
             <el-form-item label="Enable Recording">
               <el-switch v-model="configStore.config.record" />
@@ -207,13 +258,37 @@
             </el-form-item>
           </el-form>
         </el-tab-pane>
+
+        <!-- Playback config -->
+        <el-tab-pane label="Playback" name="playback">
+          <p class="tab-summary">
+            Built-in playback server that serves recordings over HLS/WebRTC, and how it
+            authenticates requests.
+          </p>
+          <el-form :model="configStore.config" label-width="180px">
+            <el-form-item label="Enable Playback">
+              <el-switch v-model="configStore.config.playback" />
+            </el-form-item>
+            <el-form-item label="Playback Address">
+              <el-input v-model="configStore.config.playbackAddress" />
+            </el-form-item>
+            <el-form-item label="Playback Auth">
+              <el-select v-model="configStore.config.playbackAuth" style="width: 100%">
+                <el-option label="None" value="no" />
+                <el-option label="Internal" value="internal" />
+                <el-option label="HTTP" value="http" />
+                <el-option label="JWT" value="jwt" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
 import { useActivityStore } from '@/stores/activity'
@@ -226,6 +301,21 @@ const configStore = useConfigStore()
 const activityStore = useActivityStore()
 const activeTab = ref('general')
 const jwksRefreshing = ref(false)
+
+// webrtcICEServers is an array in the API config; the form edits it as a
+// newline-separated list.
+const iceServersText = computed({
+  get: () =>
+    Array.isArray(configStore.config.webrtcICEServers)
+      ? configStore.config.webrtcICEServers.join('\n')
+      : '',
+  set: (value: string) => {
+    configStore.config.webrtcICEServers = value
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+  }
+})
 
 // Tracks whether the loaded config has been edited since the last successful
 // fetch/save, so we can warn before applying or discarding changes.
@@ -281,8 +371,15 @@ const confirmSave = async () => {
 }
 
 const saveConfig = async () => {
+  // MediaMTX rejects some empty-string fields outright (same as path config),
+  // so omit blanks rather than sending them verbatim.
+  const data: Record<string, any> = {}
+  for (const [key, value] of Object.entries(configStore.config)) {
+    if (value === '' || value === null || value === undefined) continue
+    data[key] = value
+  }
   try {
-    await configStore.saveConfig(configStore.config)
+    await configStore.saveConfig(data)
     markClean()
     ElMessage.success('Config saved')
     activityStore.log('Applied system config changes', 'success')
@@ -329,6 +426,14 @@ onBeforeUnmount(() => {
 <style scoped>
 :deep(.el-tabs__content) {
   padding: 20px;
+}
+
+.tab-summary {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+  max-width: 680px;
 }
 
 .page-header h1 {

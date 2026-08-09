@@ -35,22 +35,18 @@ export const usePathsConfigStore = defineStore('pathsConfig', () => {
 
   const add = async (name: string, data: any) => {
     await api.addPathConfig(name, data)
-    await fetchList()
   }
 
   const patch = async (name: string, data: any) => {
     await api.updatePathConfig(name, data)
-    await fetchList()
   }
 
   const replace = async (name: string, data: any) => {
     await api.replacePathConfig(name, data)
-    await fetchList()
   }
 
   const remove = async (name: string) => {
     await api.deletePathConfig(name)
-    await fetchList()
   }
 
   const fetchDefaults = async () => {

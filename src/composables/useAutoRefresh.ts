@@ -1,17 +1,29 @@
 import { ref, onUnmounted } from 'vue'
 
-export function useAutoRefresh(callback: () => Promise<void>, intervalMs = 5000) {
+export const AUTO_REFRESH_INTERVAL_MS = 5000
+
+export function useAutoRefresh(
+  callback: () => Promise<void>,
+  intervalMs = AUTO_REFRESH_INTERVAL_MS
+) {
   const active = ref(false)
   let timer: ReturnType<typeof setInterval> | null = null
+  let inFlight = false
 
   const start = () => {
     if (timer) return
     active.value = true
     timer = setInterval(async () => {
+      // Skip a tick when the previous call hasn't finished yet (slow API on a
+      // 5s interval) so requests never stack up and loading state stays clean.
+      if (inFlight) return
+      inFlight = true
       try {
         await callback()
       } catch {
         // Silently swallow auto-refresh errors
+      } finally {
+        inFlight = false
       }
     }, intervalMs)
   }

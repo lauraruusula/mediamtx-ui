@@ -5,11 +5,19 @@
         RTSP Connections <el-tag size="small" round>{{ store.itemCount }}</el-tag>
       </h1>
       <div class="page-actions">
+        <el-input
+          v-model="search"
+          placeholder="Search connections"
+          clearable
+          style="width: 200px"
+          :prefix-icon="Search"
+        />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          active-text="Auto refresh (5s)"
+          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
           @change="autoRefreshCtrl.toggle"
         />
+        <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
@@ -17,7 +25,7 @@
       Raw TCP-level RTSP connections. Read-only — see RTSP Sessions to disconnect a client.
     </p>
     <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="store.list" style="width: 100%">
+      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
         <el-table-column prop="id" label="ID" width="280" show-overflow-tooltip />
         <el-table-column label="Remote Address" prop="remoteAddr" min-width="160" />
         <el-table-column label="Tunnel" prop="tunnel" width="100" />
@@ -39,10 +47,10 @@
         </el-table-column>
       </el-table>
       <el-empty
-        v-if="!store.loading && store.list.length === 0"
-        description="No RTSP connections yet"
+        v-if="!store.loading && filteredList.length === 0"
+        :description="search ? `No connections match “${search}”` : 'No RTSP connections yet'"
       />
-      <div v-if="store.itemCount > 0" class="pagination-bar">
+      <div v-if="!search && store.itemCount > 0" class="pagination-bar">
         <el-pagination
           v-model:current-page="pagination.page.value"
           v-model:page-size="pagination.pageSize.value"
@@ -59,16 +67,39 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRtspConnStore } from '@/stores/rtspConn'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import { useSearchableList, filterList } from '@/composables/useSearchableList'
+import { useLastUpdated } from '@/composables/useLastUpdated'
 import { formatBytes, formatDate } from '@/composables/useFormatters'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
+import type { APIRTSPConn } from '@/types/api'
+
+const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = useRtspConnStore()
 const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage))
-const loadData = () => pagination.load()
+const lastUpdated = useLastUpdated()
+const search = ref('')
+
+const filteredList = computed(() =>
+  filterList(store.list, search.value, (c: APIRTSPConn) => c.id + ' ' + (c.remoteAddr || ''))
+)
+
+const loadData = async () => {
+  if (search.value.trim()) {
+    await store.fetchList(0, 1000)
+  } else {
+    await pagination.load()
+  }
+  lastUpdated.markUpdated()
+}
+
+useSearchableList(search, () => loadData().catch(() => {}))
 const autoRefreshCtrl = useAutoRefresh(loadData)
-onMounted(loadData)
+onMounted(() => {
+  loadData().catch(() => {})
+})
 </script>

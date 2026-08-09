@@ -14,9 +14,10 @@
         />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          active-text="Auto refresh (5s)"
+          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
           @change="autoRefreshCtrl.toggle"
         />
+        <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
@@ -88,7 +89,7 @@
                   plain
                   :disabled="!row.online"
                   aria-label="Play"
-                  @click="openPlayer(row)"
+                  @click="openPlayer(row as APIPath)"
                 />
               </el-tooltip>
               <el-tooltip content="View details" placement="top">
@@ -99,7 +100,7 @@
                   type="primary"
                   plain
                   aria-label="View details"
-                  @click="showDetail(row)"
+                  @click="showDetail(row as APIPath)"
                 />
               </el-tooltip>
               <CopyLinkButton :path-name="row.name" />
@@ -147,8 +148,8 @@
 
       <template v-if="currentPath">
         <h4 style="margin: 16px 0 8px">Stream Links</h4>
-        <p class="drawer-hint">
-          Default MediaMTX ports — adjust if this server uses custom addresses.
+        <p v-if="!portsLoaded" class="drawer-hint">
+          Showing default MediaMTX ports — couldn't read this server's live config.
         </p>
         <div class="stream-link-list">
           <div v-for="u in streamUrls" :key="u.protocol" class="stream-link-row">
@@ -191,12 +192,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { usePathsStore } from '@/stores/paths'
+import { useConfigStore } from '@/stores/config'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
-import { buildStreamUrls, type StreamUrl } from '@/composables/useStreamUrls'
+import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import { useSearchableList, filterList } from '@/composables/useSearchableList'
+import { useLastUpdated } from '@/composables/useLastUpdated'
+import {
+  buildStreamUrls,
+  portsFromConfig,
+  type StreamUrl,
+  type StreamUrlPorts
+} from '@/composables/useStreamUrls'
 import { copyToClipboard } from '@/composables/useClipboard'
 import { formatBytes, formatSourceType } from '@/composables/useFormatters'
 import { ElMessage } from 'element-plus'
@@ -205,27 +214,37 @@ import StreamPlayer from '@/components/StreamPlayer.vue'
 import CopyLinkButton from '@/components/CopyLinkButton.vue'
 import type { APIPath } from '@/types/api'
 
+const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
+
 const store = usePathsStore()
+const configStore = useConfigStore()
 const route = useRoute()
 // Prefilled when arriving via a "view this path" link from a connections/sessions
 // table (e.g. /paths?q=mystream) so the two views stay cross-navigable.
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
+
 const drawerVisible = ref(false)
 const currentPath = ref<APIPath | null>(null)
 const playerVisible = ref(false)
 const playingPath = ref('')
+const ports = ref<StreamUrlPorts>({})
+const portsLoaded = ref(false)
 
-// Search matches across all paths currently loaded on this page. Real-world
-// deployments tend to have far fewer configured paths than live connections,
-// so pagination is de-emphasized here in favor of always-available search.
-const filteredList = computed(() => {
-  if (!search.value) return store.list
-  const s = search.value.toLowerCase()
-  return store.list.filter(p => p.name.toLowerCase().includes(s))
-})
+// Use the live global config so stream links reflect real server ports.
+configStore
+  .ensureLoaded()
+  .then(cfg => {
+    ports.value = portsFromConfig(cfg)
+    portsLoaded.value = true
+  })
+  .catch(() => {})
+
+// Search matches across the full path list — while a term is active we fetch
+// everything (see loadData) so results aren't limited to the current page.
+const filteredList = computed(() => filterList(store.list, search.value, (p: APIPath) => p.name))
 
 const streamUrls = computed(() =>
-  currentPath.value ? buildStreamUrls(currentPath.value.name) : []
+  currentPath.value ? buildStreamUrls(currentPath.value.name, ports.value) : []
 )
 
 const copyUrl = async (u: StreamUrl) => {
@@ -246,9 +265,33 @@ const openPlayer = (row: APIPath) => {
 }
 
 const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage), 50)
-const loadData = () => pagination.load()
+const lastUpdated = useLastUpdated()
+
+const loadData = async () => {
+  // Searching covers the whole path list, not just the current page — this is
+  // also what makes the /paths?q= cross-links from connection views work.
+  if (search.value.trim()) {
+    await store.fetchList(0, 1000)
+  } else {
+    await pagination.load()
+  }
+  lastUpdated.markUpdated()
+}
+
+useSearchableList(search, () => loadData().catch(() => {}))
 const autoRefreshCtrl = useAutoRefresh(loadData)
-onMounted(loadData)
+
+// Keep the search box in sync if the query changes while already on this page.
+watch(
+  () => route.query.q,
+  q => {
+    search.value = typeof q === 'string' ? q : ''
+  }
+)
+
+onMounted(() => {
+  loadData().catch(() => {})
+})
 </script>
 
 <style scoped>

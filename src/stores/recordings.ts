@@ -26,7 +26,6 @@ export const useRecordingsStore = defineStore('recordings', () => {
 
   const deleteSegment = async (path: string, start: string) => {
     await deleteRecordingSegment(path, start)
-    await fetchList()
   }
 
   return { list, itemCount, loading, fetchList, fetchOne, deleteSegment }

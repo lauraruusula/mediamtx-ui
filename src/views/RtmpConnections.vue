@@ -5,17 +5,25 @@
         RTMP Connections <el-tag size="small" round>{{ store.itemCount }}</el-tag>
       </h1>
       <div class="page-actions">
+        <el-input
+          v-model="search"
+          placeholder="Search connections"
+          clearable
+          style="width: 200px"
+          :prefix-icon="Search"
+        />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          active-text="Auto refresh (5s)"
+          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
           @change="autoRefreshCtrl.toggle"
         />
+        <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
     <p class="page-subtitle">Active RTMP publish and playback connections.</p>
     <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="store.list" style="width: 100%">
+      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
         <el-table-column prop="id" label="ID" width="280" show-overflow-tooltip />
         <el-table-column label="Status" width="80">
           <template #default="{ row }">
@@ -61,10 +69,10 @@
         </el-table-column>
       </el-table>
       <el-empty
-        v-if="!store.loading && store.list.length === 0"
-        description="No RTMP connections yet"
+        v-if="!store.loading && filteredList.length === 0"
+        :description="search ? `No connections match “${search}”` : 'No RTMP connections yet'"
       />
-      <div v-if="store.itemCount > 0" class="pagination-bar">
+      <div v-if="!search && store.itemCount > 0" class="pagination-bar">
         <el-pagination
           v-model:current-page="pagination.page.value"
           v-model:page-size="pagination.pageSize.value"
@@ -81,22 +89,46 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRtmpConnStore } from '@/stores/rtmpConn'
 import { useActivityStore } from '@/stores/activity'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import { useSearchableList, filterList } from '@/composables/useSearchableList'
+import { useLastUpdated } from '@/composables/useLastUpdated'
 import { formatBytes, formatState } from '@/composables/useFormatters'
 import { ElMessage } from 'element-plus'
-import { Refresh, SwitchButton } from '@element-plus/icons-vue'
+import { Refresh, Search, SwitchButton } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import PathLink from '@/components/PathLink.vue'
+import type { APIRTMPConn } from '@/types/api'
+
+const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = useRtmpConnStore()
 const activityStore = useActivityStore()
 const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage))
-const loadData = () => pagination.load()
-const autoRefreshCtrl = useAutoRefresh(loadData)
+const lastUpdated = useLastUpdated()
+const search = ref('')
+
+const filteredList = computed(() =>
+  filterList(
+    store.list,
+    search.value,
+    (c: APIRTMPConn) => c.id + ' ' + (c.path || '') + ' ' + (c.remoteAddr || '')
+  )
+)
+
+const loadData = async () => {
+  if (search.value.trim()) {
+    await store.fetchList(0, 1000)
+  } else {
+    await pagination.load()
+  }
+  lastUpdated.markUpdated()
+}
+
+useSearchableList(search, () => loadData().catch(() => {}))
 
 const handleKick = async (id: string) => {
   try {
@@ -108,5 +140,8 @@ const handleKick = async (id: string) => {
   }
 }
 
-onMounted(loadData)
+const autoRefreshCtrl = useAutoRefresh(loadData)
+onMounted(() => {
+  loadData().catch(() => {})
+})
 </script>

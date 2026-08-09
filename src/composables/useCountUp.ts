@@ -3,9 +3,8 @@ import { ref, watch, onUnmounted } from 'vue'
 /**
  * Animates a displayed integer from its previous value to a new one whenever
  * `source` changes (ease-out, ~500ms). Purely cosmetic — a small "the numbers
- * are alive" touch for dashboard stat tiles. Falls back to an instant jump on
- * the very first value so there's no pointless 0 -> N animation on mount... or
- * rather, mount intentionally starts at 0 so the first load counts up too.
+ * are alive" touch for dashboard stat tiles. The display starts at 0, so the
+ * first value counts up on mount too.
  */
 export function useCountUp(source: () => number, duration = 500) {
   const display = ref(0)

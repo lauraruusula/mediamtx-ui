@@ -1,17 +1,17 @@
 <template>
   <div>
     <div class="page-header">
-      <p class="page-subtitle" style="margin: 0">
-        Live overview of paths, connections, and server health.
-      </p>
+      <h1>Dashboard</h1>
       <div class="page-actions">
+        <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          active-text="Auto refresh (5s)"
+          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
           @change="autoRefreshCtrl.toggle"
         />
       </div>
     </div>
+    <p class="page-subtitle">Live overview of paths, connections, and server health.</p>
 
     <el-alert
       v-if="!systemStore.loading && !systemStore.connected"
@@ -115,7 +115,7 @@
         </div>
       </template>
       <el-table
-        v-loading="systemStore.loading"
+        v-loading="systemStore.loading && initialLoading"
         :data="systemStore.paths.slice(0, 8)"
         style="width: 100%"
       >
@@ -153,7 +153,7 @@
                   plain
                   :disabled="!row.online"
                   aria-label="Play"
-                  @click="openPlayer(row)"
+                  @click="openPlayer(row as APIPath)"
                 />
               </el-tooltip>
               <CopyLinkButton :path-name="row.name" />
@@ -184,7 +184,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useSystemStore } from '@/stores/system'
 import { useThemeStore } from '@/stores/theme'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import { useLastUpdated } from '@/composables/useLastUpdated'
 import { formatBytes, formatUptime, formatSourceType } from '@/composables/useFormatters'
 import {
   Refresh,
@@ -201,13 +202,21 @@ import CopyLinkButton from '@/components/CopyLinkButton.vue'
 import { useCountUp } from '@/composables/useCountUp'
 import type { APIPath } from '@/types/api'
 
-const SAMPLE_INTERVAL_S = 5
+const SAMPLE_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
+const AUTO_REFRESH_INTERVAL_S = SAMPLE_INTERVAL_S
 const MAX_SAMPLES = 60 // 5 minutes of history at the default 5s refresh interval
 
 const systemStore = useSystemStore()
 const themeStore = useThemeStore()
+const lastUpdated = useLastUpdated()
 const playerVisible = ref(false)
 const playingPath = ref('')
+
+// The loading mask is only meaningful while the panel has nothing to render —
+// showing it on every auto-refresh tick makes the table flash white each 5s.
+// Once the first fetch has landed, refreshes update the table in place and the
+// refresh button's own spinner covers the loading state.
+const initialLoading = ref(true)
 
 // Purely cosmetic: animate the integer stat tiles counting up on load/refresh.
 // Uptime and Bandwidth are formatted strings, not raw integers, so they're
@@ -278,7 +287,7 @@ const statCards = computed(() => [
   },
   {
     icon: TrendCharts,
-    label: 'Total Bandwidth',
+    label: 'Total Traffic',
     value: formatBytes(systemStore.totalInboundBytes + systemStore.totalOutboundBytes),
     gradient: 'var(--stat-badge-5)',
     color: 'var(--stat-accent-5)'
@@ -348,13 +357,21 @@ const barOption = computed(() => {
 })
 
 const bandwidthTrendOption = computed(() => {
-  const data = bandwidthHistory.value.map(s => [s.time, s.bytes])
+  const samples = bandwidthHistory.value
+  // Convert the rolling buffer of cumulative byte totals into a per-second
+  // rate between consecutive samples — "bandwidth", not total traffic.
+  const data: [number, number][] = []
+  for (let i = 1; i < samples.length; i++) {
+    const dt = (samples[i].time - samples[i - 1].time) / 1000
+    const db = samples[i].bytes - samples[i - 1].bytes
+    data.push([samples[i].time, dt > 0 ? Math.max(db / dt, 0) : 0])
+  }
   return {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         const p = params[0]
-        return `${new Date(p.value[0]).toLocaleTimeString()}<br/>${formatBytes(p.value[1])}`
+        return `${new Date(p.value[0]).toLocaleTimeString()}<br/>${formatBytes(p.value[1])}/s`
       }
     },
     grid: { left: 4, right: 4, top: 12, bottom: 4 },
@@ -387,7 +404,9 @@ const bandwidthTrendOption = computed(() => {
 
 const refreshData = async () => {
   await systemStore.fetchAll()
+  initialLoading.value = false
   recordBandwidthSample()
+  lastUpdated.markUpdated()
 }
 
 // Unlike other list views, auto refresh defaults on here — the dashboard is a
@@ -396,7 +415,7 @@ const refreshData = async () => {
 const autoRefreshCtrl = useAutoRefresh(refreshData)
 
 onMounted(() => {
-  refreshData()
+  refreshData().catch(() => {})
   autoRefreshCtrl.start()
 })
 </script>

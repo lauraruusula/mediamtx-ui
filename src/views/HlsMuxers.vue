@@ -5,17 +5,25 @@
         HLS Muxers <el-tag size="small" round>{{ store.itemCount }}</el-tag>
       </h1>
       <div class="page-actions">
+        <el-input
+          v-model="search"
+          placeholder="Search muxers"
+          clearable
+          style="width: 200px"
+          :prefix-icon="Search"
+        />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          active-text="Auto refresh (5s)"
+          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
           @change="autoRefreshCtrl.toggle"
         />
+        <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
     <p class="page-subtitle">HLS output muxers currently serving segments. Read-only.</p>
     <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="store.list" style="width: 100%">
+      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
         <el-table-column label="Path" min-width="200" show-overflow-tooltip>
           <template #default="{ row }"><PathLink :path="row.path" /></template>
         </el-table-column>
@@ -53,8 +61,11 @@
           <template #default="{ row }">{{ formatDate(row.lastRequest) }}</template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!store.loading && store.list.length === 0" description="No HLS muxers yet" />
-      <div v-if="store.itemCount > 0" class="pagination-bar">
+      <el-empty
+        v-if="!store.loading && filteredList.length === 0"
+        :description="search ? `No muxers match “${search}”` : 'No HLS muxers yet'"
+      />
+      <div v-if="!search && store.itemCount > 0" class="pagination-bar">
         <el-pagination
           v-model:current-page="pagination.page.value"
           v-model:page-size="pagination.pageSize.value"
@@ -71,17 +82,40 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useHlsMuxerStore } from '@/stores/hlsMuxer'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import { useSearchableList, filterList } from '@/composables/useSearchableList'
+import { useLastUpdated } from '@/composables/useLastUpdated'
 import { formatBytes, formatDate } from '@/composables/useFormatters'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 import PathLink from '@/components/PathLink.vue'
+import type { APIHLSMuxer } from '@/types/api'
+
+const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = useHlsMuxerStore()
 const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage))
-const loadData = () => pagination.load()
+const lastUpdated = useLastUpdated()
+const search = ref('')
+
+const filteredList = computed(() =>
+  filterList(store.list, search.value, (m: APIHLSMuxer) => m.path || '')
+)
+
+const loadData = async () => {
+  if (search.value.trim()) {
+    await store.fetchList(0, 1000)
+  } else {
+    await pagination.load()
+  }
+  lastUpdated.markUpdated()
+}
+
+useSearchableList(search, () => loadData().catch(() => {}))
 const autoRefreshCtrl = useAutoRefresh(loadData)
-onMounted(loadData)
+onMounted(() => {
+  loadData().catch(() => {})
+})
 </script>

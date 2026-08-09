@@ -47,6 +47,15 @@
             <Microphone v-else />
           </el-icon>
         </el-button>
+        <el-slider
+          v-model="volume"
+          class="volume-slider"
+          :max="100"
+          :show-tooltip="false"
+          :disabled="isMuted"
+          aria-label="Volume"
+          @input="setVolume"
+        />
         <el-button
           text
           size="small"
@@ -82,6 +91,7 @@ const videoEl = ref<HTMLVideoElement | null>(null)
 const player = useWebRTCPlayer(videoEl)
 const showControls = ref(true)
 const isMuted = ref(true)
+const volume = ref(100)
 let controlsTimer: ReturnType<typeof setTimeout> | null = null
 
 function getWhepUrl() {
@@ -90,9 +100,11 @@ function getWhepUrl() {
   // allowing legitimate hierarchical path names ("cam/1") to keep their slashes.
   const encodedPath = props.pathName.split('/').map(encodeURIComponent).join('/')
   if (props.whepBaseUrl) return `${props.whepBaseUrl}/${encodedPath}/whep`
-  // Use direct connection to MediaMTX WebRTC server (same host, port 8889)
-  // Vite proxy interferes with WHEP protocol headers, so we connect directly
-  return `${window.location.protocol}//${window.location.hostname}:8889/${encodedPath}/whep`
+  // Use direct connection to MediaMTX WebRTC server (same host, port 8889).
+  // Vite proxy interferes with WHEP protocol headers, so we connect directly.
+  // Hardcode http like the stream-URL builders: the default WHEP server has no
+  // TLS, and an HTTPS-served admin UI would otherwise produce https:// targets.
+  return `http://${window.location.hostname}:8889/${encodedPath}/whep`
 }
 
 function startPlayer() {
@@ -107,6 +119,18 @@ function toggleMute() {
   if (videoEl.value) {
     videoEl.value.muted = !videoEl.value.muted
     isMuted.value = videoEl.value.muted
+  }
+}
+
+function setVolume(v: number | number[]) {
+  const value = Array.isArray(v) ? v[0] : v
+  if (videoEl.value) {
+    videoEl.value.volume = value / 100
+    // Dragging the slider back up also unmutes.
+    if (value > 0 && videoEl.value.muted) {
+      videoEl.value.muted = false
+      isMuted.value = false
+    }
   }
 }
 
@@ -245,5 +269,29 @@ onBeforeUnmount(() => {
 
 .toolbar-btn:hover {
   color: var(--el-color-primary) !important;
+}
+
+.volume-slider {
+  width: 80px;
+  margin: 0 8px;
+}
+
+.volume-slider :deep(.el-slider__runway) {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+.volume-slider :deep(.el-slider__bar) {
+  background-color: #fff;
+}
+
+.volume-slider :deep(.el-slider__button) {
+  width: 12px;
+  height: 12px;
+  border-color: #fff;
+  background-color: #fff;
+}
+
+.volume-slider :deep(.el-slider__button-wrapper) {
+  top: -17px;
 }
 </style>

@@ -6,8 +6,8 @@ type ThemeType = 'light' | 'dark'
 export const useThemeStore = defineStore('theme', () => {
   // Get the initial theme from local storage, falling back to the system preference
   const getDefaultTheme = (): ThemeType => {
-    const savedTheme = localStorage.getItem('theme') as ThemeType
-    if (savedTheme) return savedTheme
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme
 
     // Check system preference
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'

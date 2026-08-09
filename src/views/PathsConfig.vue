@@ -5,11 +5,19 @@
         Path Config <el-tag size="small" round>{{ store.itemCount }}</el-tag>
       </h1>
       <div class="page-actions">
+        <el-input
+          v-model="search"
+          placeholder="Search path configs"
+          clearable
+          style="width: 200px"
+          :prefix-icon="Search"
+        />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          active-text="Auto refresh (5s)"
+          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
           @change="autoRefreshCtrl.toggle"
         />
+        <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button type="primary" :icon="Plus" @click="showAddDialog">Add Path</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
@@ -19,7 +27,7 @@
     </p>
 
     <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="store.list" style="width: 100%">
+      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
         <el-table-column prop="name" label="Path Name" min-width="200" show-overflow-tooltip />
         <el-table-column label="Source" min-width="220">
           <template #default="{ row }">
@@ -81,10 +89,14 @@
         </el-table-column>
       </el-table>
       <el-empty
-        v-if="!store.loading && store.list.length === 0"
-        description="No path configs yet — add one to get started"
+        v-if="!store.loading && filteredList.length === 0"
+        :description="
+          search
+            ? `No path configs match “${search}”`
+            : 'No path configs yet — add one to get started'
+        "
       />
-      <div v-if="store.itemCount > 0" class="pagination-bar">
+      <div v-if="!search && store.itemCount > 0" class="pagination-bar">
         <el-pagination
           v-model:current-page="pagination.page.value"
           v-model:page-size="pagination.pageSize.value"
@@ -116,7 +128,7 @@
                 placeholder="e.g. rtsp://... (leave empty to publish directly)"
               />
             </el-form-item>
-            <el-form-item label="Pull on demand">
+            <el-form-item label="On demand">
               <el-switch v-model="form.sourceOnDemand" />
               <span class="form-hint"
                 >Only connect to the source when a reader requests the stream</span
@@ -180,6 +192,84 @@
             </el-form-item>
           </el-form>
         </el-tab-pane>
+
+        <el-tab-pane label="Advanced" name="advanced">
+          <el-form :model="form" label-width="140px">
+            <el-form-item label="Run on Demand">
+              <el-input
+                v-model="form.runOnDemand"
+                type="textarea"
+                :rows="2"
+                placeholder="Shell command to run when a reader requests this path"
+              />
+              <span class="form-hint"
+                >Runs with the MediaMTX server's OS privileges — only use trusted commands</span
+              >
+            </el-form-item>
+            <el-form-item label="Run on Not Ready">
+              <el-input
+                v-model="form.runOnNotReady"
+                type="textarea"
+                :rows="2"
+                placeholder="Shell command to run when the stream goes down"
+              />
+            </el-form-item>
+            <el-form-item label="Run on Read">
+              <el-input
+                v-model="form.runOnRead"
+                type="textarea"
+                :rows="2"
+                placeholder="Shell command to run when a reader starts"
+              />
+            </el-form-item>
+            <el-form-item label="Run on Unread">
+              <el-input
+                v-model="form.runOnUnread"
+                type="textarea"
+                :rows="2"
+                placeholder="Shell command to run when the last reader disconnects"
+              />
+            </el-form-item>
+            <el-form-item label="Publish IPs">
+              <el-input
+                v-model="publishIPsText"
+                placeholder="Comma-separated IPs, e.g. 192.168.1.0/24, 203.0.113.5"
+              />
+              <span class="form-hint"
+                >Restrict which IPs may publish to this path. Leave empty to allow all.</span
+              >
+            </el-form-item>
+            <el-form-item label="Read IPs">
+              <el-input
+                v-model="readIPsText"
+                placeholder="Comma-separated IPs, e.g. 192.168.1.0/24"
+              />
+              <span class="form-hint"
+                >Restrict which IPs may read this path. Leave empty to allow all.</span
+              >
+            </el-form-item>
+            <el-form-item label="Override Publish">
+              <el-select v-model="form.overridePublish" style="width: 100%">
+                <el-option label="Default (None)" value="none" />
+                <el-option label="Allow" value="allow" />
+                <el-option label="Deny" value="deny" />
+              </el-select>
+              <span class="form-hint">Overrides the global publish permission for this path</span>
+            </el-form-item>
+            <el-form-item label="Record Segment Duration">
+              <el-input
+                v-model="form.recordSegmentDuration"
+                placeholder="e.g. 6s (overrides the global default)"
+              />
+            </el-form-item>
+            <el-form-item label="Record Part Duration">
+              <el-input
+                v-model="form.recordPartDuration"
+                placeholder="e.g. 1s (overrides the global default)"
+              />
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
       </el-tabs>
 
       <template #footer>
@@ -191,20 +281,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { usePathsConfigStore } from '@/stores/pathsConfig'
 import { useActivityStore } from '@/stores/activity'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import { useSearchableList, filterList } from '@/composables/useSearchableList'
+import { useLastUpdated } from '@/composables/useLastUpdated'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { ElMessage } from 'element-plus'
-import { Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { Refresh, Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
+
+const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = usePathsConfigStore()
 const activityStore = useActivityStore()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const activeTab = ref('source')
+const search = ref('')
+
+const filteredList = computed(() =>
+  filterList(store.list, search.value, (r: any) => r.name + ' ' + (r.source || ''))
+)
 
 const emptyForm = () => ({
   name: '',
@@ -217,10 +316,41 @@ const emptyForm = () => ({
   record: false,
   recordPath: '',
   recordFormat: 'fmp4',
-  runOnReady: ''
+  runOnReady: '',
+  runOnDemand: '',
+  runOnNotReady: '',
+  runOnRead: '',
+  runOnUnread: '',
+  publishIPs: [] as string[],
+  readIPs: [] as string[],
+  overridePublish: 'none',
+  recordSegmentDuration: '',
+  recordPartDuration: ''
 })
 
 const form = reactive(emptyForm())
+
+// publishIPs / readIPs are arrays in the API config; the form edits them as
+// comma-separated text.
+const splitIPs = (v: string) =>
+  v
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+
+const publishIPsText = computed({
+  get: () => (form.publishIPs || []).join(', '),
+  set: (v: string) => {
+    form.publishIPs = splitIPs(v)
+  }
+})
+
+const readIPsText = computed({
+  get: () => (form.readIPs || []).join(', '),
+  set: (v: string) => {
+    form.readIPs = splitIPs(v)
+  }
+})
 
 const showAddDialog = () => {
   isEdit.value = false
@@ -243,7 +373,24 @@ const showEditDialog = (row: any) => {
     record: !!row.record,
     recordPath: row.recordPath || '',
     recordFormat: row.recordFormat || 'fmp4',
-    runOnReady: row.runOnReady || ''
+    runOnReady: row.runOnReady || '',
+    runOnDemand: row.runOnDemand || '',
+    runOnNotReady: row.runOnNotReady || '',
+    runOnRead: row.runOnRead || '',
+    runOnUnread: row.runOnUnread || '',
+    publishIPs: Array.isArray(row.publishIPs)
+      ? row.publishIPs
+      : row.publishIPs
+        ? String(row.publishIPs).split(',')
+        : [],
+    readIPs: Array.isArray(row.readIPs)
+      ? row.readIPs
+      : row.readIPs
+        ? String(row.readIPs).split(',')
+        : [],
+    overridePublish: row.overridePublish || 'none',
+    recordSegmentDuration: row.recordSegmentDuration || '',
+    recordPartDuration: row.recordPartDuration || ''
   })
   dialogVisible.value = true
 }
@@ -267,6 +414,9 @@ const handleSave = async () => {
     } else {
       await store.add(name, data)
     }
+    // Reload from the page the user is actually on — the store actions no
+    // longer re-fetch, so pagination isn't silently reset to page 1.
+    await loadData()
     ElMessage.success(`Path config "${name}" saved`)
     activityStore.log(`${isEdit.value ? 'Updated' : 'Added'} path config "${name}"`, 'success')
     dialogVisible.value = false
@@ -278,6 +428,7 @@ const handleSave = async () => {
 const handleDelete = async (name: string) => {
   try {
     await store.remove(name)
+    await loadData()
     ElMessage.success(`Path config "${name}" deleted`)
     activityStore.log(`Deleted path config "${name}"`, 'error')
   } catch (err) {
@@ -286,9 +437,22 @@ const handleDelete = async (name: string) => {
 }
 
 const pagination = usePagination((page, itemsPerPage) => store.fetchList(page, itemsPerPage))
-const loadData = () => pagination.load()
+const lastUpdated = useLastUpdated()
+
+const loadData = async () => {
+  if (search.value.trim()) {
+    await store.fetchList(0, 1000)
+  } else {
+    await pagination.load()
+  }
+  lastUpdated.markUpdated()
+}
+
+useSearchableList(search, () => loadData().catch(() => {}))
 const autoRefreshCtrl = useAutoRefresh(loadData)
-onMounted(loadData)
+onMounted(() => {
+  loadData().catch(() => {})
+})
 </script>
 
 <style scoped>

@@ -1,32 +1,54 @@
 <template>
-  <el-dropdown trigger="click" @command="handleCopy">
-    <el-tooltip content="Copy stream link" placement="top">
-      <el-button :icon="Link" circle size="small" plain aria-label="Copy stream link" @click.stop />
-    </el-tooltip>
-    <template #dropdown>
-      <div class="copy-link-caveat">
-        Default MediaMTX ports — adjust if this server uses custom addresses.
-      </div>
-      <el-dropdown-item v-for="u in urls" :key="u.protocol" :command="u">
-        <el-icon><DocumentCopy /></el-icon>
-        {{ u.label }}
-      </el-dropdown-item>
-    </template>
-  </el-dropdown>
+  <el-tooltip content="Copy stream link" placement="top">
+    <el-dropdown trigger="click" @command="handleCopy">
+      <el-button :icon="Link" circle size="small" plain aria-label="Copy stream link" />
+      <template #dropdown>
+        <div v-if="!portsLoaded" class="copy-link-caveat">
+          Showing default MediaMTX ports — couldn't read this server's live config.
+        </div>
+        <el-dropdown-item v-for="u in urls" :key="u.protocol" :command="u">
+          <el-icon><DocumentCopy /></el-icon>
+          {{ u.label }}
+        </el-dropdown-item>
+      </template>
+    </el-dropdown>
+  </el-tooltip>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Link, DocumentCopy } from '@element-plus/icons-vue'
-import { buildStreamUrls, type StreamUrl } from '@/composables/useStreamUrls'
+import { useConfigStore } from '@/stores/config'
+import {
+  buildStreamUrls,
+  portsFromConfig,
+  type StreamUrl,
+  type StreamUrlPorts
+} from '@/composables/useStreamUrls'
 import { copyToClipboard } from '@/composables/useClipboard'
 
 const props = defineProps<{
   pathName: string
 }>()
 
-const urls = computed(() => buildStreamUrls(props.pathName))
+const configStore = useConfigStore()
+const ports = ref<StreamUrlPorts>({})
+const portsLoaded = ref(false)
+
+// Use the live global config so the URLs reflect the server's real ports.
+// Falls back to defaults (with a caveat) if the config can't be fetched.
+onMounted(() => {
+  configStore
+    .ensureLoaded()
+    .then(cfg => {
+      ports.value = portsFromConfig(cfg)
+      portsLoaded.value = true
+    })
+    .catch(() => {})
+})
+
+const urls = computed(() => buildStreamUrls(props.pathName, ports.value))
 
 async function handleCopy(u: StreamUrl) {
   const ok = await copyToClipboard(u.url)
