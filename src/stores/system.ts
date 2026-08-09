@@ -38,7 +38,7 @@ export const useSystemStore = defineStore('system', () => {
     paths.value.reduce((sum, p) => sum + (p.readers?.length || 0), 0)
   )
 
-  // 计算源类型分布（从 path.source.type）
+  // Compute source type distribution (from path.source.type)
   const sourceTypeDistribution = computed(() => {
     const dist: Record<string, number> = {}
     for (const p of paths.value) {
@@ -63,13 +63,15 @@ export const useSystemStore = defineStore('system', () => {
   }
 
   const fetchProtocolCounts = async () => {
+    // itemsPerPage must be >= 1 — the API rejects 0 as invalid. itemCount
+    // reflects the total regardless of page size, so 1 is enough here.
     const results = await Promise.allSettled([
-      getRTSPConnections(0, 0),
-      getRTSPSessions(0, 0),
-      getRTMPConnections(0, 0),
-      getWebRTCSessions(0, 0),
-      listHlsMuxers(0, 0),
-      getSRTConnections(0, 0)
+      getRTSPConnections(0, 1),
+      getRTSPSessions(0, 1),
+      getRTMPConnections(0, 1),
+      getWebRTCSessions(0, 1),
+      listHlsMuxers(0, 1),
+      getSRTConnections(0, 1)
     ])
 
     const getCount = (r: PromiseSettledResult<any>) =>

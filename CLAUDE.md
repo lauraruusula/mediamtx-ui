@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Admin UI for [MediaMTX](https://github.com/bluenviron/mediamtx) streaming media server. Built with Vue 3 (Composition API + `<script setup>`), TypeScript, Vite, Element Plus, Pinia, and ECharts. The UI is in Chinese.
+Admin UI for [MediaMTX](https://github.com/bluenviron/mediamtx) streaming media server. Built with Vue 3 (Composition API + `<script setup>`), TypeScript, Vite, Element Plus, Pinia, and ECharts. The UI is in English.
 
 ## Commands
 

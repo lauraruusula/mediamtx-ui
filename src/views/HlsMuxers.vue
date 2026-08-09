@@ -3,27 +3,27 @@
     <div class="page-header">
       <h1>HLS Muxers <el-tag size="small" round>{{ store.itemCount }}</el-tag></h1>
       <div class="page-actions">
-        <el-switch v-model="autoRefreshCtrl.active.value" active-text="自动刷新" @change="autoRefreshCtrl.toggle" />
-        <el-button :icon="Refresh" @click="loadData" :loading="store.loading">刷新</el-button>
+        <el-switch v-model="autoRefreshCtrl.active.value" active-text="Auto refresh" @change="autoRefreshCtrl.toggle" />
+        <el-button :icon="Refresh" @click="loadData" :loading="store.loading">Refresh</el-button>
       </div>
     </div>
     <el-card shadow="hover">
       <el-table :data="store.list" v-loading="store.loading" style="width: 100%">
-        <el-table-column prop="path" label="路径" min-width="200" show-overflow-tooltip />
-        <el-table-column label="出站流量" width="120">
+        <el-table-column prop="path" label="Path" min-width="200" show-overflow-tooltip />
+        <el-table-column label="Outbound Traffic" width="120">
           <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
         </el-table-column>
-        <el-table-column label="丢弃帧" width="100" align="center">
+        <el-table-column label="Dropped Frames" width="100" align="center">
           <template #default="{ row }">{{ row.outboundFramesDiscarded || 0 }}</template>
         </el-table-column>
-        <el-table-column label="创建时间" width="170">
+        <el-table-column label="Created" width="170">
           <template #default="{ row }">{{ formatDate(row.created) }}</template>
         </el-table-column>
-        <el-table-column label="最后请求" width="170">
+        <el-table-column label="Last Request" width="170">
           <template #default="{ row }">{{ formatDate(row.lastRequest) }}</template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!store.loading && store.list.length === 0" description="暂无 HLS Muxer" />
+      <el-empty v-if="!store.loading && store.list.length === 0" description="No HLS muxers" />
     </el-card>
   </div>
 </template>

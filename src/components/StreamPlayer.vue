@@ -12,20 +12,20 @@
     <div v-if="player.state.value !== 'connected'" class="player-overlay">
       <template v-if="player.state.value === 'connecting'">
         <el-icon class="spin" :size="36"><Loading /></el-icon>
-        <span class="overlay-text">正在连接...</span>
+        <span class="overlay-text">Connecting...</span>
       </template>
       <template v-else-if="player.state.value === 'reconnecting'">
         <el-icon class="spin" :size="36"><Loading /></el-icon>
-        <span class="overlay-text">{{ player.error.value || '正在重连...' }}</span>
+        <span class="overlay-text">{{ player.error.value || 'Reconnecting...' }}</span>
       </template>
       <template v-else-if="player.state.value === 'error'">
         <el-icon :size="36" color="#f56c6c"><CircleCloseFilled /></el-icon>
-        <span class="overlay-text">{{ player.error.value || '连接失败' }}</span>
-        <el-button type="primary" size="small" @click="retry" style="margin-top: 8px">重试</el-button>
+        <span class="overlay-text">{{ player.error.value || 'Connection failed' }}</span>
+        <el-button type="primary" size="small" @click="retry" style="margin-top: 8px">Retry</el-button>
       </template>
       <template v-else>
         <el-icon :size="36" color="#909399"><VideoPlay /></el-icon>
-        <span class="overlay-text">等待播放</span>
+        <span class="overlay-text">Waiting to play</span>
       </template>
     </div>
 
@@ -74,10 +74,14 @@ const isMuted = ref(true)
 let controlsTimer: ReturnType<typeof setTimeout> | null = null
 
 function getWhepUrl() {
-  if (props.whepBaseUrl) return `${props.whepBaseUrl}/${props.pathName}/whep`
+  // Encode each path segment individually so names with special characters
+  // (spaces, '?', '#', etc.) can't alter the URL's structure, while still
+  // allowing legitimate hierarchical path names ("cam/1") to keep their slashes.
+  const encodedPath = props.pathName.split('/').map(encodeURIComponent).join('/')
+  if (props.whepBaseUrl) return `${props.whepBaseUrl}/${encodedPath}/whep`
   // Use direct connection to MediaMTX WebRTC server (same host, port 8889)
   // Vite proxy interferes with WHEP protocol headers, so we connect directly
-  return `${window.location.protocol}//${window.location.hostname}:8889/${props.pathName}/whep`
+  return `${window.location.protocol}//${window.location.hostname}:8889/${encodedPath}/whep`
 }
 
 function startPlayer() {

@@ -11,7 +11,7 @@ export function useAutoRefresh(callback: () => Promise<void>, intervalMs = 5000)
       try {
         await callback()
       } catch {
-        // 静默处理自动刷新错误
+        // Silently swallow auto-refresh errors
       }
     }, intervalMs)
   }

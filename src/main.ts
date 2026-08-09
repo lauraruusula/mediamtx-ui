@@ -21,7 +21,7 @@ import VChart from 'vue-echarts'
 
 use([CanvasRenderer, PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
-// 初始化主题
+// Initialize theme
 const savedTheme = localStorage.getItem('theme')
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
 const theme = savedTheme || (prefersDark ? 'dark' : 'light')

@@ -68,57 +68,57 @@ watch(
       >
         <el-menu-item index="/">
           <el-icon><Odometer /></el-icon>
-          <template #title>仪表盘</template>
+          <template #title>Dashboard</template>
         </el-menu-item>
 
         <el-sub-menu index="streams">
           <template #title>
             <el-icon><VideoPlay /></el-icon>
-            <span>流管理</span>
+            <span>Stream Management</span>
           </template>
           <el-menu-item index="/paths">
             <el-icon><Connection /></el-icon>
-            <span>路径状态</span>
+            <span>Path Status</span>
           </el-menu-item>
           <el-menu-item index="/paths/config">
             <el-icon><Setting /></el-icon>
-            <span>路径配置</span>
+            <span>Path Config</span>
           </el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="connections">
           <template #title>
             <el-icon><Link /></el-icon>
-            <span>连接管理</span>
+            <span>Connection Management</span>
           </template>
           <el-menu-item index="/rtsp/connections">
-            <span>RTSP 连接</span>
+            <span>RTSP Connections</span>
           </el-menu-item>
           <el-menu-item index="/rtsp/sessions">
-            <span>RTSP 会话</span>
+            <span>RTSP Sessions</span>
           </el-menu-item>
           <el-menu-item index="/rtmp/connections">
-            <span>RTMP 连接</span>
+            <span>RTMP Connections</span>
           </el-menu-item>
           <el-menu-item index="/webrtc/sessions">
-            <span>WebRTC 会话</span>
+            <span>WebRTC Sessions</span>
           </el-menu-item>
           <el-menu-item index="/hls/muxers">
             <span>HLS Muxers</span>
           </el-menu-item>
           <el-menu-item index="/srt/connections">
-            <span>SRT 连接</span>
+            <span>SRT Connections</span>
           </el-menu-item>
         </el-sub-menu>
 
         <el-menu-item index="/recordings">
           <el-icon><Folder /></el-icon>
-          <template #title>录制管理</template>
+          <template #title>Recordings</template>
         </el-menu-item>
 
         <el-menu-item index="/config">
           <el-icon><Setting /></el-icon>
-          <template #title>系统配置</template>
+          <template #title>System Config</template>
         </el-menu-item>
       </el-menu>
     </aside>
@@ -141,7 +141,7 @@ watch(
             <span>{{ formatUptime(systemStore.info.started) }}</span>
           </div>
           <el-tooltip
-            :content="themeStore.currentTheme === 'dark' ? '浅色模式' : '深色模式'"
+            :content="themeStore.currentTheme === 'dark' ? 'Light mode' : 'Dark mode'"
             placement="bottom"
           >
             <el-button circle size="small" @click="themeStore.toggleTheme()">

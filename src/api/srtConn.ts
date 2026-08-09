@@ -4,7 +4,7 @@ export const getSRTConnections = (page = 0, itemsPerPage = 100) =>
   api.get('/v3/srtconns/list', { params: { page, itemsPerPage } })
 
 export const getSRTConnection = (id: string) =>
-  api.get(`/v3/srtconns/get/${id}`)
+  api.get(`/v3/srtconns/get/${encodeURIComponent(id)}`)
 
 export const kickSRTConnection = (id: string) =>
-  api.post(`/v3/srtconns/kick/${id}`)
+  api.post(`/v3/srtconns/kick/${encodeURIComponent(id)}`)

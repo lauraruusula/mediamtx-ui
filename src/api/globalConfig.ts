@@ -1,15 +1,15 @@
 import api from '@/api'
 
-// 获取全局配置
+// Get global config
 export const getGlobalConfig = () => api.get('/v3/config/global/get')
 
-// 更新全局配置
+// Update global config
 export const updateGlobalConfig = (config: any) => api.patch('/v3/config/global/patch', config)
 
-// 获取全局配置的默认值（使用get接口，因为MediaMTX API没有提供默认配置端点）
+// Get default values for global config (uses the get endpoint, since MediaMTX's API has no dedicated defaults endpoint)
 export const getGlobalConfigDefaults = () => api.get('/v3/config/global/get')
 
-// 获取全局配置的示例（使用get接口，因为MediaMTX API没有提供示例配置端点）
+// Get an example global config (uses the get endpoint, since MediaMTX's API has no dedicated example endpoint)
 export const getGlobalConfigExample = () => {
   return api.get('/v3/config/global/get')
 } 

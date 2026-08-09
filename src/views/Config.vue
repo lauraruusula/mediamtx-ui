@@ -1,19 +1,19 @@
 <template>
   <div>
     <div class="page-header">
-      <h1>系统配置</h1>
+      <h1>System Config</h1>
       <div class="page-actions">
-        <el-button :icon="Refresh" @click="refreshConfig">刷新</el-button>
-        <el-button type="primary" @click="saveConfig">保存配置</el-button>
+        <el-button :icon="Refresh" @click="refreshConfig">Refresh</el-button>
+        <el-button type="primary" @click="saveConfig">Save Config</el-button>
       </div>
     </div>
 
     <el-card shadow="hover">
       <el-tabs v-model="activeTab" type="border-card">
-        <!-- 基本配置 -->
-        <el-tab-pane label="基本配置" name="general">
+        <!-- General config -->
+        <el-tab-pane label="General" name="general">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="日志级别">
+            <el-form-item label="Log Level">
               <el-select v-model="configStore.config.logLevel" style="width: 100%">
                 <el-option label="DEBUG" value="debug" />
                 <el-option label="INFO" value="info" />
@@ -21,35 +21,35 @@
                 <el-option label="ERROR" value="error" />
               </el-select>
             </el-form-item>
-            <el-form-item label="日志文件">
+            <el-form-item label="Log File">
               <el-input v-model="configStore.config.logFile" />
             </el-form-item>
-            <el-form-item label="读取超时">
+            <el-form-item label="Read Timeout">
               <el-input v-model="configStore.config.readTimeout" />
             </el-form-item>
-            <el-form-item label="写入超时">
+            <el-form-item label="Write Timeout">
               <el-input v-model="configStore.config.writeTimeout" />
             </el-form-item>
-            <el-form-item label="写入队列大小">
+            <el-form-item label="Write Queue Size">
               <el-input-number v-model="configStore.config.writeQueueSize" :min="1" style="width: 100%" />
             </el-form-item>
-            <el-form-item label="UDP 最大负载大小">
+            <el-form-item label="UDP Max Payload Size">
               <el-input-number v-model="configStore.config.udpMaxPayloadSize" :min="1" style="width: 100%" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <!-- 认证配置 -->
-        <el-tab-pane label="认证" name="auth">
+        <!-- Auth config -->
+        <el-tab-pane label="Auth" name="auth">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="认证方法">
+            <el-form-item label="Auth Method">
               <el-select v-model="configStore.config.authMethod" style="width: 100%">
-                <el-option label="内部" value="internal" />
+                <el-option label="Internal" value="internal" />
                 <el-option label="HTTP" value="http" />
                 <el-option label="JWT" value="jwt" />
               </el-select>
             </el-form-item>
-            <el-form-item label="HTTP 认证地址">
+            <el-form-item label="HTTP Auth Address">
               <el-input v-model="configStore.config.authHTTPAddress" />
             </el-form-item>
             <el-form-item label="JWT JWKS">
@@ -58,124 +58,124 @@
           </el-form>
         </el-tab-pane>
 
-        <!-- RTSP 配置 -->
+        <!-- RTSP config -->
         <el-tab-pane label="RTSP" name="rtsp">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="启用 RTSP">
+            <el-form-item label="Enable RTSP">
               <el-switch v-model="configStore.config.rtsp" />
             </el-form-item>
-            <el-form-item label="RTSP 地址">
+            <el-form-item label="RTSP Address">
               <el-input v-model="configStore.config.rtspAddress" />
             </el-form-item>
-            <el-form-item label="RTSPS 地址">
+            <el-form-item label="RTSPS Address">
               <el-input v-model="configStore.config.rtspsAddress" />
             </el-form-item>
-            <el-form-item label="RTSP 加密">
+            <el-form-item label="RTSP Encryption">
               <el-select v-model="configStore.config.rtspEncryption" style="width: 100%">
-                <el-option label="无" value="no" />
-                <el-option label="可选" value="optional" />
-                <el-option label="必需" value="strict" />
+                <el-option label="None" value="no" />
+                <el-option label="Optional" value="optional" />
+                <el-option label="Required" value="strict" />
               </el-select>
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <!-- RTMP 配置 -->
+        <!-- RTMP config -->
         <el-tab-pane label="RTMP" name="rtmp">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="启用 RTMP">
+            <el-form-item label="Enable RTMP">
               <el-switch v-model="configStore.config.rtmp" />
             </el-form-item>
-            <el-form-item label="RTMP 地址">
+            <el-form-item label="RTMP Address">
               <el-input v-model="configStore.config.rtmpAddress" />
             </el-form-item>
-            <el-form-item label="RTMP 加密">
+            <el-form-item label="RTMP Encryption">
               <el-select v-model="configStore.config.rtmpEncryption" style="width: 100%">
-                <el-option label="无" value="no" />
-                <el-option label="可选" value="optional" />
-                <el-option label="必需" value="strict" />
+                <el-option label="None" value="no" />
+                <el-option label="Optional" value="optional" />
+                <el-option label="Required" value="strict" />
               </el-select>
             </el-form-item>
-            <el-form-item label="RTMPS 地址">
+            <el-form-item label="RTMPS Address">
               <el-input v-model="configStore.config.rtmpsAddress" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <!-- HLS 配置 -->
+        <!-- HLS config -->
         <el-tab-pane label="HLS" name="hls">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="启用 HLS">
+            <el-form-item label="Enable HLS">
               <el-switch v-model="configStore.config.hls" />
             </el-form-item>
-            <el-form-item label="HLS 地址">
+            <el-form-item label="HLS Address">
               <el-input v-model="configStore.config.hlsAddress" />
             </el-form-item>
-            <el-form-item label="HLS 变体">
+            <el-form-item label="HLS Variant">
               <el-select v-model="configStore.config.hlsVariant" style="width: 100%">
                 <el-option label="MPEGTS" value="mpegts" />
                 <el-option label="FMP4" value="fmp4" />
                 <el-option label="Low Latency" value="lowLatency" />
               </el-select>
             </el-form-item>
-            <el-form-item label="分段数量">
+            <el-form-item label="Segment Count">
               <el-input-number v-model="configStore.config.hlsSegmentCount" :min="1" style="width: 100%" />
             </el-form-item>
-            <el-form-item label="分段时长">
+            <el-form-item label="Segment Duration">
               <el-input v-model="configStore.config.hlsSegmentDuration" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <!-- WebRTC 配置 -->
+        <!-- WebRTC config -->
         <el-tab-pane label="WebRTC" name="webrtc">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="启用 WebRTC">
+            <el-form-item label="Enable WebRTC">
               <el-switch v-model="configStore.config.webrtc" />
             </el-form-item>
-            <el-form-item label="WebRTC 地址">
+            <el-form-item label="WebRTC Address">
               <el-input v-model="configStore.config.webrtcAddress" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <!-- SRT 配置 -->
+        <!-- SRT config -->
         <el-tab-pane label="SRT" name="srt">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="启用 SRT">
+            <el-form-item label="Enable SRT">
               <el-switch v-model="configStore.config.srt" />
             </el-form-item>
-            <el-form-item label="SRT 地址">
+            <el-form-item label="SRT Address">
               <el-input v-model="configStore.config.srtAddress" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <!-- API 配置 -->
+        <!-- API config -->
         <el-tab-pane label="API" name="api">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="启用 API">
+            <el-form-item label="Enable API">
               <el-switch v-model="configStore.config.api" />
             </el-form-item>
-            <el-form-item label="API 地址">
+            <el-form-item label="API Address">
               <el-input v-model="configStore.config.apiAddress" />
             </el-form-item>
-            <el-form-item label="API 加密">
+            <el-form-item label="API Encryption">
               <el-switch v-model="configStore.config.apiEncryption" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <!-- 录制配置 -->
-        <el-tab-pane label="录制" name="record">
+        <!-- Recording config -->
+        <el-tab-pane label="Recording" name="record">
           <el-form :model="configStore.config" label-width="180px">
-            <el-form-item label="启用录制">
+            <el-form-item label="Enable Recording">
               <el-switch v-model="configStore.config.record" />
             </el-form-item>
-            <el-form-item label="录制路径">
+            <el-form-item label="Recording Path">
               <el-input v-model="configStore.config.recordPath" />
             </el-form-item>
-            <el-form-item label="录制格式">
+            <el-form-item label="Recording Format">
               <el-select v-model="configStore.config.recordFormat" style="width: 100%">
                 <el-option label="FMP4" value="fmp4" />
                 <el-option label="MPEGTS" value="mpegts" />
@@ -200,18 +200,18 @@ const activeTab = ref('general')
 const refreshConfig = async () => {
   try {
     await configStore.fetchConfig()
-    ElMessage.success('配置已刷新')
+    ElMessage.success('Config refreshed')
   } catch {
-    ElMessage.error('刷新配置失败')
+    ElMessage.error('Failed to refresh config')
   }
 }
 
 const saveConfig = async () => {
   try {
     await configStore.saveConfig(configStore.config)
-    ElMessage.success('配置已保存')
+    ElMessage.success('Config saved')
   } catch {
-    ElMessage.error('保存配置失败')
+    ElMessage.error('Failed to save config')
   }
 }
 

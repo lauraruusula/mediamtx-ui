@@ -22,7 +22,7 @@
       <el-col :xs="24" :md="12" style="margin-bottom: 12px">
         <el-card shadow="hover">
           <template #header>
-            <span style="font-weight: 600">源类型分布</span>
+            <span style="font-weight: 600">Source Type Distribution</span>
           </template>
           <v-chart :option="pieOption" style="height: 280px" autoresize />
         </el-card>
@@ -30,7 +30,7 @@
       <el-col :xs="24" :md="12" style="margin-bottom: 12px">
         <el-card shadow="hover">
           <template #header>
-            <span style="font-weight: 600">协议连接数</span>
+            <span style="font-weight: 600">Protocol Connections</span>
           </template>
           <v-chart :option="barOption" style="height: 280px" autoresize />
         </el-card>
@@ -41,49 +41,49 @@
     <el-card shadow="hover">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
-          <span style="font-weight: 600">活跃路径</span>
+          <span style="font-weight: 600">Active Paths</span>
           <div style="display: flex; gap: 8px">
-            <el-button text type="primary" @click="$router.push('/paths')">查看全部</el-button>
+            <el-button text type="primary" @click="$router.push('/paths')">View All</el-button>
             <el-button :icon="Refresh" circle size="small" @click="refreshData" :loading="systemStore.loading" />
           </div>
         </div>
       </template>
       <el-table :data="systemStore.paths.slice(0, 8)" v-loading="systemStore.loading" style="width: 100%">
-        <el-table-column prop="name" label="路径名称" min-width="150" show-overflow-tooltip />
-        <el-table-column label="状态" width="80">
+        <el-table-column prop="name" label="Path Name" min-width="150" show-overflow-tooltip />
+        <el-table-column label="Status" width="80">
           <template #default="{ row }">
             <el-tag :type="row.online ? 'success' : 'info'" size="small">
-              {{ row.online ? '在线' : '离线' }}
+              {{ row.online ? 'Online' : 'Offline' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="源类型" width="120">
+        <el-table-column label="Source Type" width="120">
           <template #default="{ row }">
             <span>{{ row.source ? formatSourceType(row.source.type) : '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="读取者" width="80" align="center">
+        <el-table-column label="Readers" width="80" align="center">
           <template #default="{ row }">{{ row.readers?.length || 0 }}</template>
         </el-table-column>
-        <el-table-column label="入站流量" width="110">
+        <el-table-column label="Inbound Traffic" width="110">
           <template #default="{ row }">{{ formatBytes(row.inboundBytes || 0) }}</template>
         </el-table-column>
-        <el-table-column label="出站流量" width="110">
+        <el-table-column label="Outbound Traffic" width="110">
           <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="80" fixed="right">
+        <el-table-column label="Actions" width="80" fixed="right">
           <template #default="{ row }">
-            <el-button text type="success" size="small" :disabled="!row.online" @click="openPlayer(row)">播放</el-button>
+            <el-button text type="success" size="small" :disabled="!row.online" @click="openPlayer(row)">Play</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!systemStore.loading && systemStore.paths.length === 0" description="暂无路径" />
+      <el-empty v-if="!systemStore.loading && systemStore.paths.length === 0" description="No paths" />
     </el-card>
 
     <!-- Player Dialog -->
     <el-dialog
       v-model="playerVisible"
-      :title="`播放 - ${playingPath}`"
+      :title="`Play - ${playingPath}`"
       width="720px"
       destroy-on-close
       align-center
@@ -113,22 +113,22 @@ const openPlayer = (row: APIPath) => {
 const statCards = computed(() => [
   {
     icon: Connection,
-    label: '路径总数',
+    label: 'Total Paths',
     value: systemStore.pathCount
   },
   {
     icon: VideoPlay,
-    label: '在线路径',
+    label: 'Online Paths',
     value: systemStore.onlinePaths.length
   },
   {
     icon: UserFilled,
-    label: '读取者',
+    label: 'Readers',
     value: systemStore.totalReaders
   },
   {
     icon: Timer,
-    label: '运行时间',
+    label: 'Uptime',
     value: formatUptime(systemStore.info?.started)
   }
 ])
@@ -148,7 +148,7 @@ const pieOption = computed(() => {
       avoidLabelOverlap: false,
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
-      data: data.length > 0 ? data : [{ name: '无数据', value: 0 }]
+      data: data.length > 0 ? data : [{ name: 'No data', value: 0 }]
     }]
   }
 })
@@ -160,7 +160,7 @@ const barOption = computed(() => {
     grid: { left: 60, right: 20, top: 10, bottom: 30 },
     xAxis: {
       type: 'category',
-      data: ['RTSP连接', 'RTSP会话', 'RTMP', 'WebRTC', 'HLS', 'SRT'],
+      data: ['RTSP Conn', 'RTSP Sess', 'RTMP', 'WebRTC', 'HLS', 'SRT'],
       axisLabel: { color: 'var(--el-text-color-secondary)', fontSize: 11 }
     },
     yAxis: {

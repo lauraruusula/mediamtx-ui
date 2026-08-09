@@ -24,6 +24,6 @@ export const useHlsMuxerStore = defineStore('hlsMuxer', () => {
     return res as unknown as APIHLSMuxer
   }
 
-  // HLS Muxers 不支持 kick/close 操作
+  // HLS Muxers do not support kick/close operations
   return { list, itemCount, loading, fetchList, fetchOne }
 })

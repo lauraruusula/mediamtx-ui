@@ -226,7 +226,7 @@ export function useWebRTCPlayer(
 
     error.value = err
     setState('reconnecting')
-    options.onError?.(`${err}，正在重连...`)
+    options.onError?.(`${err}, reconnecting...`)
 
     restartTimeout = setTimeout(() => {
       restartTimeout = null

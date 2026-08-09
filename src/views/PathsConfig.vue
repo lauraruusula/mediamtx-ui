@@ -1,48 +1,48 @@
 <template>
   <div>
     <div class="page-header">
-      <h1>路径配置</h1>
+      <h1>Path Config</h1>
       <div class="page-actions">
-        <el-button type="primary" :icon="Plus" @click="showAddDialog">添加路径</el-button>
-        <el-button :icon="Refresh" @click="loadData" :loading="store.loading">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="showAddDialog">Add Path</el-button>
+        <el-button :icon="Refresh" @click="loadData" :loading="store.loading">Refresh</el-button>
       </div>
     </div>
 
     <el-card shadow="hover">
       <el-table :data="store.list" v-loading="store.loading" style="width: 100%">
-        <el-table-column prop="name" label="路径名称" min-width="200" show-overflow-tooltip />
-        <el-table-column label="源" min-width="250">
+        <el-table-column prop="name" label="Path Name" min-width="200" show-overflow-tooltip />
+        <el-table-column label="Source" min-width="250">
           <template #default="{ row }">
             <span>{{ row.source || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="Actions" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="showEditDialog(row)">编辑</el-button>
-            <el-popconfirm title="确定删除此路径配置？" @confirm="handleDelete(row.name)">
+            <el-button text type="primary" size="small" @click="showEditDialog(row)">Edit</el-button>
+            <el-popconfirm title="Delete this path config?" @confirm="handleDelete(row.name)">
               <template #reference>
-                <el-button text type="danger" size="small">删除</el-button>
+                <el-button text type="danger" size="small">Delete</el-button>
               </template>
             </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!store.loading && store.list.length === 0" description="暂无路径配置" />
+      <el-empty v-if="!store.loading && store.list.length === 0" description="No path configs" />
     </el-card>
 
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑路径配置' : '添加路径配置'" width="500px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? 'Edit Path Config' : 'Add Path Config'" width="500px">
       <el-form :model="form" label-width="100px">
-        <el-form-item label="路径名称" required>
-          <el-input v-model="form.name" :disabled="isEdit" placeholder="例如: mystream" />
+        <el-form-item label="Path Name" required>
+          <el-input v-model="form.name" :disabled="isEdit" placeholder="e.g. mystream" />
         </el-form-item>
-        <el-form-item label="源地址">
-          <el-input v-model="form.source" placeholder="例如: rtsp://..." />
+        <el-form-item label="Source">
+          <el-input v-model="form.source" placeholder="e.g. rtsp://..." />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
+        <el-button @click="dialogVisible = false">Cancel</el-button>
+        <el-button type="primary" @click="handleSave">Save</el-button>
       </template>
     </el-dialog>
   </div>
@@ -75,7 +75,7 @@ const showEditDialog = (row: any) => {
 
 const handleSave = async () => {
   if (!form.name) {
-    ElMessage.warning('请输入路径名称')
+    ElMessage.warning('Please enter a path name')
     return
   }
   try {
@@ -86,19 +86,19 @@ const handleSave = async () => {
     } else {
       await store.add(form.name, data)
     }
-    ElMessage.success('保存成功')
+    ElMessage.success('Saved successfully')
     dialogVisible.value = false
   } catch {
-    ElMessage.error('保存失败')
+    ElMessage.error('Failed to save')
   }
 }
 
 const handleDelete = async (name: string) => {
   try {
     await store.remove(name)
-    ElMessage.success('已删除')
+    ElMessage.success('Deleted')
   } catch {
-    ElMessage.error('删除失败')
+    ElMessage.error('Failed to delete')
   }
 }
 
