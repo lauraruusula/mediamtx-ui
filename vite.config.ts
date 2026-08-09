@@ -33,31 +33,6 @@ export default defineConfig({
     }
   },
   build: {
-    rolldownOptions: {
-      output: {
-        // Split the entry chunk (Element Plus + ECharts + core vendors are all
-        // statically imported by main.ts) into stable vendor chunks so they
-        // load in parallel and keep their cache hashes when app code changes.
-        manualChunks(id: string) {
-          if (!id.includes('node_modules')) return
-          if (id.includes('element-plus') || id.includes('@element-plus/icons-vue'))
-            return 'element-plus'
-          if (id.includes('/echarts/') || id.includes('/zrender/') || id.includes('/vue-echarts/'))
-            return 'echarts'
-          if (
-            id.includes('/vue/') ||
-            id.includes('/@vue/') ||
-            id.includes('/vue-router/') ||
-            id.includes('/pinia/') ||
-            id.includes('/@vueuse/') ||
-            id.includes('/axios/') ||
-            id.includes('/dayjs/')
-          )
-            return 'vue-vendor'
-          return 'misc-vendor'
-        }
-      }
-    },
     // The tree-shaken echarts chunk (~630 kB, ECharts core + the three chart
     // types) stays above the default 500 kB warning threshold, so raise it.
     chunkSizeWarningLimit: 800
