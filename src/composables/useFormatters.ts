@@ -31,6 +31,22 @@ export function formatUptime(startedStr: string | null | undefined): string {
   return `${d}d ${h}h`
 }
 
+// MediaMTX's /v3/info already returns a "v"-prefixed version (e.g. "v1.20.0").
+// Normalize so callers can safely prefix "v" without ever producing "vv1.20.0".
+export function formatVersion(version: string | null | undefined): string {
+  if (!version) return '-'
+  return version.startsWith('v') ? version : `v${version}`
+}
+
+export function formatRelativeTime(epochMs: number): string {
+  const diff = Math.floor((Date.now() - epochMs) / 1000)
+  if (diff < 5) return 'just now'
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86400)}d ago`
+}
+
 export function formatState(state: string): string {
   const map: Record<string, string> = {
     idle: 'Idle',

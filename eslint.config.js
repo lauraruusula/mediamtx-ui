@@ -16,7 +16,9 @@ export default [
     languageOptions: {
       globals: {
         ...globals.browser,
-        ...globals.node
+        ...globals.node,
+        // Injected at build time via vite.config.ts `define` (admin UI's own version)
+        __APP_VERSION__: 'readonly'
       },
       ecmaVersion: 'latest',
       sourceType: 'module',

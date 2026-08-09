@@ -37,6 +37,13 @@ export const useSystemStore = defineStore('system', () => {
   const totalReaders = computed(() =>
     paths.value.reduce((sum, p) => sum + (p.readers?.length || 0), 0)
   )
+  // Aggregate bandwidth across all paths, for a dashboard-level bandwidth stat.
+  const totalInboundBytes = computed(() =>
+    paths.value.reduce((sum, p) => sum + (p.inboundBytes || 0), 0)
+  )
+  const totalOutboundBytes = computed(() =>
+    paths.value.reduce((sum, p) => sum + (p.outboundBytes || 0), 0)
+  )
 
   // Compute source type distribution (from path.source.type)
   const sourceTypeDistribution = computed(() => {
@@ -57,7 +64,7 @@ export const useSystemStore = defineStore('system', () => {
   }
 
   const fetchPaths = async () => {
-    const res = await getPaths(0, 1000) as unknown as APIListResponse<APIPath>
+    const res = (await getPaths(0, 1000)) as unknown as APIListResponse<APIPath>
     paths.value = res.items || []
     pathCount.value = res.itemCount || 0
   }
@@ -75,7 +82,7 @@ export const useSystemStore = defineStore('system', () => {
     ])
 
     const getCount = (r: PromiseSettledResult<any>) =>
-      r.status === 'fulfilled' ? (r.value?.itemCount || 0) : 0
+      r.status === 'fulfilled' ? r.value?.itemCount || 0 : 0
 
     protocolCounts.value = {
       rtspConns: getCount(results[0]),
@@ -108,6 +115,8 @@ export const useSystemStore = defineStore('system', () => {
     connected,
     onlinePaths,
     totalReaders,
+    totalInboundBytes,
+    totalOutboundBytes,
     sourceTypeDistribution,
     fetchInfo,
     fetchPaths,

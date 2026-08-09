@@ -2,24 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light dark">
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141414">
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f6fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0c12" />
     <title>MediaMTX Admin</title>
     <style>
-      /* Preload styles to prevent flash of unstyled content */
+      /* Preload styles to prevent flash of unstyled content — kept in sync with
+         the --el-bg-color-page / --el-text-color-primary tokens in style.css */
       body {
-        background-color: #f5f7fa;
-        color: #303133;
-        transition: background-color 0.3s, color 0.3s;
+        background-color: #f5f6fb;
+        color: #101828;
+        transition:
+          background-color 0.3s,
+          color 0.3s;
       }
-      
+
       @media (prefers-color-scheme: dark) {
         body {
-          background-color: #0a0a0a;
-          color: #e5eaf3;
+          background-color: #0a0c12;
+          color: #f2f4f7;
         }
       }
     </style>

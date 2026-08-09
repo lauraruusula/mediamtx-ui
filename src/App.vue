@@ -2,14 +2,17 @@
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useSystemStore } from './stores/system'
+import { useActivityStore } from './stores/activity'
 import { useRoute } from 'vue-router'
-import { formatUptime } from './composables/useFormatters'
+import { formatUptime, formatVersion, formatRelativeTime } from './composables/useFormatters'
 
 const isCollapse = ref(false)
 const isMobile = ref(false)
 const route = useRoute()
 const themeStore = useThemeStore()
 const systemStore = useSystemStore()
+const activityStore = useActivityStore()
+const appVersion = __APP_VERSION__
 
 const toggleSidebar = () => {
   isCollapse.value = !isCollapse.value
@@ -43,20 +46,24 @@ watch(
 <template>
   <div class="app-wrapper">
     <!-- Mobile mask -->
-    <div
-      v-if="isMobile && !isCollapse"
-      class="sidebar-mask"
-      @click="isCollapse = true"
-    />
+    <div v-if="isMobile && !isCollapse" class="sidebar-mask" @click="isCollapse = true" />
 
     <!-- Sidebar -->
     <aside
-      :style="{ width: isCollapse ? '64px' : '220px' }"
-      :class="['sidebar-container', { collapsed: isMobile && isCollapse, 'mobile-open': isMobile && !isCollapse }]"
+      :style="{ width: isCollapse ? '68px' : '240px' }"
+      :class="[
+        'sidebar-container',
+        { collapsed: isMobile && isCollapse, 'mobile-open': isMobile && !isCollapse }
+      ]"
     >
       <div class="sidebar-logo">
-        <el-icon class="logo-icon"><VideoCamera /></el-icon>
-        <span v-if="!isCollapse" class="logo-text">MediaMTX</span>
+        <div class="logo-badge">
+          <el-icon><VideoCamera /></el-icon>
+        </div>
+        <div v-if="!isCollapse" class="logo-text-group">
+          <span class="logo-text">MediaMTX</span>
+          <span class="logo-subtext">Admin Console</span>
+        </div>
       </div>
 
       <el-menu
@@ -92,21 +99,27 @@ watch(
             <span>Connection Management</span>
           </template>
           <el-menu-item index="/rtsp/connections">
+            <el-icon><Monitor /></el-icon>
             <span>RTSP Connections</span>
           </el-menu-item>
           <el-menu-item index="/rtsp/sessions">
+            <el-icon><User /></el-icon>
             <span>RTSP Sessions</span>
           </el-menu-item>
           <el-menu-item index="/rtmp/connections">
+            <el-icon><Film /></el-icon>
             <span>RTMP Connections</span>
           </el-menu-item>
           <el-menu-item index="/webrtc/sessions">
+            <el-icon><VideoCamera /></el-icon>
             <span>WebRTC Sessions</span>
           </el-menu-item>
           <el-menu-item index="/hls/muxers">
+            <el-icon><Files /></el-icon>
             <span>HLS Muxers</span>
           </el-menu-item>
           <el-menu-item index="/srt/connections">
+            <el-icon><Promotion /></el-icon>
             <span>SRT Connections</span>
           </el-menu-item>
         </el-sub-menu>
@@ -121,35 +134,96 @@ watch(
           <template #title>System Config</template>
         </el-menu-item>
       </el-menu>
+
+      <div v-if="!isCollapse" class="sidebar-footer">
+        <span class="sidebar-footer-text">Admin Console v{{ appVersion }}</span>
+        <a
+          class="sidebar-footer-link"
+          href="https://github.com/lauraruusula/mediamtx-ui"
+          target="_blank"
+          rel="noopener"
+        >
+          Report a bug or request a feature
+        </a>
+      </div>
     </aside>
 
     <!-- Main -->
     <div class="main-container">
       <header class="app-header">
         <div class="header-left">
-          <el-icon style="font-size: 20px; cursor: pointer" @click="toggleSidebar">
-            <Expand v-if="isCollapse" />
-            <Fold v-else />
-          </el-icon>
+          <button class="icon-btn" aria-label="Toggle sidebar" @click="toggleSidebar">
+            <el-icon>
+              <Expand v-if="isCollapse" />
+              <Fold v-else />
+            </el-icon>
+          </button>
           <span class="header-title">{{ $route.meta.title || 'MediaMTX' }}</span>
         </div>
         <div class="header-right">
-          <div class="server-info" v-if="systemStore.info">
-            <span :class="['status-dot', { offline: !systemStore.connected }]" />
-            <span class="version-text">v{{ systemStore.info.version }}</span>
-            <span style="opacity: 0.5">|</span>
-            <span>{{ formatUptime(systemStore.info.started) }}</span>
-          </div>
+          <el-tooltip
+            v-if="systemStore.info"
+            :content="`MediaMTX ${formatVersion(systemStore.info.version)} · running for ${formatUptime(systemStore.info.started)}`"
+            placement="bottom"
+          >
+            <div class="server-pill">
+              <span :class="['status-dot', { offline: !systemStore.connected }]" />
+              <span class="version-text">{{ formatVersion(systemStore.info.version) }}</span>
+              <span class="pill-divider" />
+              <span>{{ formatUptime(systemStore.info.started) }}</span>
+            </div>
+          </el-tooltip>
+
+          <el-popover
+            placement="bottom-end"
+            :width="320"
+            trigger="click"
+            @show="activityStore.markRead()"
+          >
+            <template #reference>
+              <button class="icon-btn activity-btn" aria-label="Recent activity">
+                <el-icon><Bell /></el-icon>
+                <span v-if="activityStore.unread > 0" class="activity-badge">{{
+                  activityStore.unread > 9 ? '9+' : activityStore.unread
+                }}</span>
+              </button>
+            </template>
+            <div class="activity-panel">
+              <div class="activity-panel-header">
+                <span>Recent Activity</span>
+                <el-button
+                  v-if="activityStore.entries.length"
+                  text
+                  size="small"
+                  @click="activityStore.clear()"
+                  >Clear</el-button
+                >
+              </div>
+              <p v-if="activityStore.entries.length === 0" class="activity-empty">
+                Actions you take — kicks, saves, deletes — will show up here for this session.
+              </p>
+              <div v-else class="activity-list">
+                <div v-for="e in activityStore.entries" :key="e.id" class="activity-item">
+                  <span :class="['activity-dot', e.level]" />
+                  <div class="activity-item-body">
+                    <div class="activity-message">{{ e.message }}</div>
+                    <div class="activity-time">{{ formatRelativeTime(e.at) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-popover>
+
           <el-tooltip
             :content="themeStore.currentTheme === 'dark' ? 'Light mode' : 'Dark mode'"
             placement="bottom"
           >
-            <el-button circle size="small" @click="themeStore.toggleTheme()">
+            <button class="icon-btn" aria-label="Toggle theme" @click="themeStore.toggleTheme()">
               <el-icon>
                 <Sunny v-if="themeStore.currentTheme === 'dark'" />
                 <Moon v-else />
               </el-icon>
-            </el-button>
+            </button>
           </el-tooltip>
         </div>
       </header>
@@ -175,7 +249,34 @@ watch(
 }
 
 .sidebar-menu:not(.el-menu--collapse) {
-  width: 220px;
+  width: 240px;
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.sidebar-footer-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+}
+
+.sidebar-footer-link {
+  font-size: 10.5px;
+  color: var(--el-text-color-placeholder);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.sidebar-footer-link:hover {
+  color: var(--el-color-primary);
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {

@@ -11,7 +11,10 @@ export const useRtmpConnStore = defineStore('rtmpConn', () => {
   const fetchList = async (page = 0, itemsPerPage = 100) => {
     loading.value = true
     try {
-      const res = await getRTMPConnections(page, itemsPerPage) as unknown as APIListResponse<APIRTMPConn>
+      const res = (await getRTMPConnections(
+        page,
+        itemsPerPage
+      )) as unknown as APIListResponse<APIRTMPConn>
       list.value = res.items || []
       itemCount.value = res.itemCount || 0
     } finally {
@@ -27,6 +30,7 @@ export const useRtmpConnStore = defineStore('rtmpConn', () => {
   const kick = async (id: string) => {
     await kickRTMPConnection(id)
     list.value = list.value.filter(c => c.id !== id)
+    itemCount.value = Math.max(0, itemCount.value - 1)
   }
 
   return { list, itemCount, loading, fetchList, fetchOne, kick }

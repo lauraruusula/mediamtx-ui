@@ -8,7 +8,7 @@ Admin UI for [MediaMTX](https://github.com/bluenviron/mediamtx) streaming media 
 
 ## Commands
 
-- `npm run dev` — Start dev server on port 3000 (proxies `/api/*` to `http://localhost:9997`)
+- `npm run dev` — Start dev server on port 3001 (proxies `/api/*` to `http://localhost:9997`)
 - `npm run dev:api` — Build and start MediaMTX with API enabled (requires Go)
 - `npm run build` — Type-check with vue-tsc then build with Vite
 - `npm run preview` — Preview production build
@@ -21,10 +21,12 @@ Admin UI for [MediaMTX](https://github.com/bluenviron/mediamtx) streaming media 
 - `src/types/api.ts` — All TypeScript types matching MediaMTX Go structs (`internal/defs/api*.go`). Single source of truth.
 - `src/api/` — Axios-based API modules. Central instance in `index.ts` (baseURL `/api`, response interceptor unwraps `.data`). One file per API resource.
 - `src/stores/` — Pinia stores (Composition API). Each store owns reactive state + async actions. Stores receive unwrapped responses (no `.data` access needed).
-- `src/views/` — Page components: Home (dashboard with ECharts), Paths, PathsConfig, connection views (RTSP Conn/Session, RTMP, WebRTC, HLS Muxers, SRT), Recordings, Config.
-- `src/composables/` — Shared composables: `useFormatters.ts` (formatBytes, formatDate, formatUptime, formatState, formatSourceType), `useAutoRefresh.ts` (interval polling).
+- `src/views/` — Page components: Home (dashboard with ECharts + bandwidth trend), Paths, PathsConfig, connection views (RTSP Conn/Session, RTMP, WebRTC, HLS Muxers, SRT), Recordings, Config.
+- `src/components/` — Reusable UI: `StreamPlayer.vue` (WHEP playback), `CopyLinkButton.vue` (per-protocol stream URL copy), `PathLink.vue` (cross-links a connection's path back to the Paths view).
+- `src/composables/` — Shared composables: `useFormatters.ts`, `useAutoRefresh.ts` (interval polling), `usePagination.ts`, `useErrorMessage.ts` (surfaces real API error bodies), `useClipboard.ts`, `useCountUp.ts` (dashboard number animation), `useStreamUrls.ts` / `useRecordingPlayback.ts` (URL builders), `useWebRTCPlayer.ts` (WHEP client).
+- `src/stores/activity.ts` — Session-scoped log of admin actions (kicks, saves, deletes), surfaced via the header's activity bell.
 - `src/router/index.ts` — Routes with lazy loading. Route guard sets document title.
-- `src/style.css` — Global styles with CSS custom properties for light/dark theming. Sidebar colors adapt to theme (white in light, dark in dark).
+- `src/style.css` — Global styles with CSS custom properties for light/dark theming, including full tonal ramps for primary/success/warning/danger/info (needed for Element Plus message/tag/alert backgrounds — see comments in the file before changing base colors).
 
 ## Key API Mapping
 
@@ -49,4 +51,4 @@ MediaMTX API has distinct concepts:
 
 1. Start MediaMTX with API: `npm run dev:api` (or manually: `cd ../mediamtx && go build . && ./mediamtx ../mediamtx-ui/mediamtx-dev.yml`)
 2. Start UI: `npm run dev`
-3. Open http://localhost:3000
+3. Open http://localhost:3001

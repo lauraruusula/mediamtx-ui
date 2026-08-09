@@ -1,12 +1,18 @@
 <template>
   <div>
     <div class="page-header">
-      <h1>System Config</h1>
+      <h1>
+        System Config
+        <el-tag v-if="isDirty" type="warning" size="small" round>Unsaved changes</el-tag>
+      </h1>
       <div class="page-actions">
         <el-button :icon="Refresh" @click="refreshConfig">Refresh</el-button>
-        <el-button type="primary" @click="saveConfig">Save Config</el-button>
+        <el-button type="primary" :disabled="!isDirty" @click="confirmSave">Save Config</el-button>
       </div>
     </div>
+    <p class="page-subtitle">
+      Server-wide MediaMTX configuration. Changes apply immediately to the live server.
+    </p>
 
     <el-card shadow="hover">
       <el-tabs v-model="activeTab" type="border-card">
@@ -31,10 +37,18 @@
               <el-input v-model="configStore.config.writeTimeout" />
             </el-form-item>
             <el-form-item label="Write Queue Size">
-              <el-input-number v-model="configStore.config.writeQueueSize" :min="1" style="width: 100%" />
+              <el-input-number
+                v-model="configStore.config.writeQueueSize"
+                :min="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="UDP Max Payload Size">
-              <el-input-number v-model="configStore.config.udpMaxPayloadSize" :min="1" style="width: 100%" />
+              <el-input-number
+                v-model="configStore.config.udpMaxPayloadSize"
+                :min="1"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -54,6 +68,12 @@
             </el-form-item>
             <el-form-item label="JWT JWKS">
               <el-input v-model="configStore.config.authJWTJWKS" />
+            </el-form-item>
+            <el-form-item v-if="configStore.config.authMethod === 'jwt'" label=" ">
+              <el-button :icon="Refresh" :loading="jwksRefreshing" @click="handleRefreshJwks">
+                Refresh JWKS
+              </el-button>
+              <span class="form-hint">Re-fetches the JSON Web Key Set from the configured URL</span>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -119,7 +139,11 @@
               </el-select>
             </el-form-item>
             <el-form-item label="Segment Count">
-              <el-input-number v-model="configStore.config.hlsSegmentCount" :min="1" style="width: 100%" />
+              <el-input-number
+                v-model="configStore.config.hlsSegmentCount"
+                :min="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="Segment Duration">
               <el-input v-model="configStore.config.hlsSegmentDuration" />
@@ -189,37 +213,125 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
-import { ElMessage } from 'element-plus'
+import { useActivityStore } from '@/stores/activity'
+import { refreshJwks } from '@/api/auth'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import { getErrorMessage } from '@/composables/useErrorMessage'
 
 const configStore = useConfigStore()
+const activityStore = useActivityStore()
 const activeTab = ref('general')
+const jwksRefreshing = ref(false)
+
+// Tracks whether the loaded config has been edited since the last successful
+// fetch/save, so we can warn before applying or discarding changes.
+const isDirty = ref(false)
+let lastSavedSnapshot = '{}'
+
+const snapshot = () => JSON.stringify(configStore.config)
+const markClean = () => {
+  lastSavedSnapshot = snapshot()
+  isDirty.value = false
+}
+
+watch(
+  () => configStore.config,
+  () => {
+    isDirty.value = snapshot() !== lastSavedSnapshot
+  },
+  { deep: true }
+)
 
 const refreshConfig = async () => {
+  if (isDirty.value) {
+    try {
+      await ElMessageBox.confirm(
+        'You have unsaved changes that will be lost. Discard them and reload from the server?',
+        'Discard unsaved changes?',
+        { confirmButtonText: 'Discard', cancelButtonText: 'Keep editing', type: 'warning' }
+      )
+    } catch {
+      return // user chose to keep editing
+    }
+  }
   try {
     await configStore.fetchConfig()
+    markClean()
     ElMessage.success('Config refreshed')
-  } catch {
-    ElMessage.error('Failed to refresh config')
+  } catch (err) {
+    ElMessage.error(getErrorMessage(err, 'Failed to refresh config'))
   }
+}
+
+const confirmSave = async () => {
+  try {
+    await ElMessageBox.confirm(
+      'This applies your changes to the live MediaMTX server configuration immediately.',
+      'Apply config changes?',
+      { confirmButtonText: 'Apply', cancelButtonText: 'Cancel', type: 'warning' }
+    )
+  } catch {
+    return // cancelled
+  }
+  await saveConfig()
 }
 
 const saveConfig = async () => {
   try {
     await configStore.saveConfig(configStore.config)
+    markClean()
     ElMessage.success('Config saved')
-  } catch {
-    ElMessage.error('Failed to save config')
+    activityStore.log('Applied system config changes', 'success')
+  } catch (err) {
+    ElMessage.error(getErrorMessage(err, 'Failed to save config'))
   }
 }
 
-onMounted(refreshConfig)
+const handleRefreshJwks = async () => {
+  jwksRefreshing.value = true
+  try {
+    await refreshJwks()
+    ElMessage.success('JWKS refreshed')
+    activityStore.log('Refreshed JWT JWKS', 'success')
+  } catch (err) {
+    ElMessage.error(getErrorMessage(err, 'Failed to refresh JWKS'))
+  } finally {
+    jwksRefreshing.value = false
+  }
+}
+
+const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+  if (isDirty.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
+onBeforeRouteLeave(() => {
+  if (!isDirty.value) return true
+  return window.confirm('You have unsaved config changes. Leave without saving?')
+})
+
+onMounted(() => {
+  refreshConfig()
+  window.addEventListener('beforeunload', beforeUnloadHandler)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', beforeUnloadHandler)
+})
 </script>
 
 <style scoped>
 :deep(.el-tabs__content) {
   padding: 20px;
+}
+
+.page-header h1 {
+  gap: 10px;
 }
 </style>

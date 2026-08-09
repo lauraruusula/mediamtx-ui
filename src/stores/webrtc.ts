@@ -11,7 +11,10 @@ export const useWebRTCStore = defineStore('webrtc', () => {
   const fetchList = async (page = 0, itemsPerPage = 100) => {
     loading.value = true
     try {
-      const res = await getWebRTCSessions(page, itemsPerPage) as unknown as APIListResponse<APIWebRTCSession>
+      const res = (await getWebRTCSessions(
+        page,
+        itemsPerPage
+      )) as unknown as APIListResponse<APIWebRTCSession>
       list.value = res.items || []
       itemCount.value = res.itemCount || 0
     } finally {
@@ -27,6 +30,7 @@ export const useWebRTCStore = defineStore('webrtc', () => {
   const kick = async (id: string) => {
     await kickWebRTCSession(id)
     list.value = list.value.filter(s => s.id !== id)
+    itemCount.value = Math.max(0, itemCount.value - 1)
   }
 
   return { list, itemCount, loading, fetchList, fetchOne, kick }

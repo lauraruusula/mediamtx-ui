@@ -1,12 +1,6 @@
 <template>
   <div class="stream-player">
-    <video
-      ref="videoEl"
-      autoplay
-      playsinline
-      muted
-      @click="toggleControls"
-    />
+    <video ref="videoEl" autoplay playsinline muted @click="toggleControls" />
 
     <!-- Overlay: connecting / error -->
     <div v-if="player.state.value !== 'connected'" class="player-overlay">
@@ -19,30 +13,47 @@
         <span class="overlay-text">{{ player.error.value || 'Reconnecting...' }}</span>
       </template>
       <template v-else-if="player.state.value === 'error'">
-        <el-icon :size="36" color="#f56c6c"><CircleCloseFilled /></el-icon>
+        <el-icon :size="36" color="var(--el-color-danger)"><CircleCloseFilled /></el-icon>
         <span class="overlay-text">{{ player.error.value || 'Connection failed' }}</span>
-        <el-button type="primary" size="small" @click="retry" style="margin-top: 8px">Retry</el-button>
+        <el-button type="primary" size="small" style="margin-top: 8px" @click="retry"
+          >Retry</el-button
+        >
       </template>
       <template v-else>
-        <el-icon :size="36" color="#909399"><VideoPlay /></el-icon>
+        <el-icon :size="36" color="var(--el-color-info)"><VideoPlay /></el-icon>
         <span class="overlay-text">Waiting to play</span>
       </template>
     </div>
 
     <!-- Bottom toolbar -->
-    <div class="player-toolbar" :class="{ visible: showControls || player.state.value !== 'connected' }">
+    <div
+      class="player-toolbar"
+      :class="{ visible: showControls || player.state.value !== 'connected' }"
+    >
       <div class="toolbar-left">
         <el-tag size="small" type="success" effect="dark">WebRTC</el-tag>
         <span class="path-label">{{ pathName }}</span>
       </div>
       <div class="toolbar-right">
-        <el-button text size="small" @click="toggleMute" class="toolbar-btn">
+        <el-button
+          text
+          size="small"
+          class="toolbar-btn"
+          :aria-label="isMuted ? 'Unmute' : 'Mute'"
+          @click="toggleMute"
+        >
           <el-icon :size="18">
             <Mute v-if="isMuted" />
             <Microphone v-else />
           </el-icon>
         </el-button>
-        <el-button text size="small" @click="toggleFullscreen" class="toolbar-btn">
+        <el-button
+          text
+          size="small"
+          class="toolbar-btn"
+          aria-label="Toggle fullscreen"
+          @click="toggleFullscreen"
+        >
           <el-icon :size="18"><FullScreen /></el-icon>
         </el-button>
       </div>
@@ -59,7 +70,7 @@ import {
   VideoPlay,
   Mute,
   Microphone,
-  FullScreen,
+  FullScreen
 } from '@element-plus/icons-vue'
 
 const props = defineProps<{
@@ -123,10 +134,13 @@ function resetControlsTimer() {
   }
 }
 
-watch(() => props.pathName, () => {
-  player.disconnect()
-  startPlayer()
-})
+watch(
+  () => props.pathName,
+  () => {
+    player.disconnect()
+    startPlayer()
+  }
+)
 
 onMounted(startPlayer)
 
@@ -141,9 +155,10 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   background: #000;
-  border-radius: 6px;
+  border-radius: var(--radius-md, 10px);
   overflow: hidden;
   aspect-ratio: 16 / 9;
+  box-shadow: var(--shadow-sm);
 }
 
 .stream-player video {
@@ -176,8 +191,12 @@ onBeforeUnmount(() => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .player-toolbar {
@@ -225,6 +244,6 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-btn:hover {
-  color: #409eff !important;
+  color: var(--el-color-primary) !important;
 }
 </style>
