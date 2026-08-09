@@ -50,7 +50,7 @@
         </el-table-column>
         <el-table-column
           label="Tracks"
-          width="80"
+          width="95"
           align="center"
           sortable
           :sort-method="
@@ -61,7 +61,7 @@
         </el-table-column>
         <el-table-column
           label="Readers"
-          width="90"
+          width="105"
           align="center"
           sortable
           :sort-method="
@@ -70,10 +70,10 @@
         >
           <template #default="{ row }">{{ row.readers?.length || 0 }}</template>
         </el-table-column>
-        <el-table-column label="Inbound" width="110" sortable prop="inboundBytes">
+        <el-table-column label="Inbound" width="120" sortable prop="inboundBytes">
           <template #default="{ row }">{{ formatBytes(row.inboundBytes || 0) }}</template>
         </el-table-column>
-        <el-table-column label="Outbound" width="110" sortable prop="outboundBytes">
+        <el-table-column label="Outbound" width="120" sortable prop="outboundBytes">
           <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
         </el-table-column>
         <el-table-column label="Actions" width="120" fixed="right">

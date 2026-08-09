@@ -480,17 +480,6 @@ body {
   }
 }
 
-.server-pill .pill-divider {
-  width: 1px;
-  height: 12px;
-  background: var(--el-border-color);
-}
-
-.server-pill .version-text {
-  font-weight: 600;
-  color: var(--el-text-color-regular);
-}
-
 .app-main {
   flex: 1;
   overflow-y: auto;
@@ -649,9 +638,28 @@ body {
   color: var(--el-text-color-secondary);
 }
 
+/* Keep header label + sort caret on a single line and vertically centered,
+   instead of Element Plus's default (white-space: normal), which lets the
+   caret wrap onto its own line on narrower columns and makes header rows
+   uneven. justify-content mirrors the column's own text-align so centered/
+   right-aligned columns still read the same as before. */
 .el-table th.el-table__cell .cell {
-  word-break: keep-all;
-  overflow-wrap: normal;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell.is-center .cell {
+  justify-content: center;
+}
+
+.el-table th.el-table__cell.is-right .cell {
+  justify-content: flex-end;
+}
+
+.el-table th.el-table__cell .caret-wrapper {
+  flex-shrink: 0;
 }
 
 .el-table td.el-table__cell {
@@ -786,15 +794,6 @@ body {
 
   .page-header h1 {
     font-size: 19px;
-  }
-
-  .server-info .version-text,
-  .server-pill .version-text {
-    display: none;
-  }
-
-  .server-pill .pill-divider {
-    display: none;
   }
 }
 

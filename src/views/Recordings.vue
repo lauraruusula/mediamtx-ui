@@ -17,10 +17,10 @@
     <el-card shadow="hover">
       <el-table v-loading="store.loading" :data="store.list" style="width: 100%">
         <el-table-column prop="name" label="Recording Name" min-width="200" show-overflow-tooltip />
-        <el-table-column label="Segments" width="100" align="center" sortable>
+        <el-table-column label="Segments" width="115" align="center" sortable>
           <template #default="{ row }">{{ row.segments?.length || 0 }}</template>
         </el-table-column>
-        <el-table-column label="Actions" width="60" fixed="right">
+        <el-table-column label="Actions" width="90" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
               <el-tooltip content="View segments" placement="top">

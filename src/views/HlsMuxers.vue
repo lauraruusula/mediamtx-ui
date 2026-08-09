@@ -19,12 +19,12 @@
         <el-table-column label="Path" min-width="200" show-overflow-tooltip>
           <template #default="{ row }"><PathLink :path="row.path" /></template>
         </el-table-column>
-        <el-table-column label="Outbound Traffic" width="120" sortable prop="outboundBytes">
+        <el-table-column label="Outbound Traffic" width="180" sortable prop="outboundBytes">
           <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
         </el-table-column>
         <el-table-column
           label="Dropped Frames"
-          width="100"
+          width="155"
           align="center"
           sortable
           prop="outboundFramesDiscarded"

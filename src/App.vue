@@ -4,7 +4,7 @@ import { useThemeStore } from './stores/theme'
 import { useSystemStore } from './stores/system'
 import { useActivityStore } from './stores/activity'
 import { useRoute } from 'vue-router'
-import { formatUptime, formatVersion, formatRelativeTime } from './composables/useFormatters'
+import { formatUptime, formatRelativeTime } from './composables/useFormatters'
 
 const isCollapse = ref(false)
 const isMobile = ref(false)
@@ -163,13 +163,11 @@ watch(
         <div class="header-right">
           <el-tooltip
             v-if="systemStore.info"
-            :content="`MediaMTX ${formatVersion(systemStore.info.version)} · running for ${formatUptime(systemStore.info.started)}`"
+            :content="`MediaMTX server · running for ${formatUptime(systemStore.info.started)}`"
             placement="bottom"
           >
             <div class="server-pill">
               <span :class="['status-dot', { offline: !systemStore.connected }]" />
-              <span class="version-text">{{ formatVersion(systemStore.info.version) }}</span>
-              <span class="pill-divider" />
               <span>{{ formatUptime(systemStore.info.started) }}</span>
             </div>
           </el-tooltip>

@@ -35,13 +35,13 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Inbound" width="100" sortable prop="inboundBytes">
+        <el-table-column label="Inbound" width="120" sortable prop="inboundBytes">
           <template #default="{ row }">{{ formatBytes(row.inboundBytes || 0) }}</template>
         </el-table-column>
-        <el-table-column label="Outbound" width="100" sortable prop="outboundBytes">
+        <el-table-column label="Outbound" width="120" sortable prop="outboundBytes">
           <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
         </el-table-column>
-        <el-table-column label="Actions" width="60" fixed="right">
+        <el-table-column label="Actions" width="90" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
               <el-popconfirm

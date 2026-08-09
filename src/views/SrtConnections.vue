@@ -33,7 +33,7 @@
         <el-table-column prop="remoteAddr" label="Remote Address" width="160" />
         <el-table-column
           label="Packets Sent"
-          width="100"
+          width="140"
           align="center"
           sortable
           prop="packetsSent"
@@ -42,17 +42,17 @@
         </el-table-column>
         <el-table-column
           label="Packets Received"
-          width="100"
+          width="165"
           align="center"
           sortable
           prop="packetsReceived"
         >
           <template #default="{ row }">{{ row.packetsReceived || 0 }}</template>
         </el-table-column>
-        <el-table-column label="RTT (ms)" width="90" align="center" sortable prop="msRTT">
+        <el-table-column label="RTT (ms)" width="100" align="center" sortable prop="msRTT">
           <template #default="{ row }">{{ row.msRTT?.toFixed(1) || '-' }}</template>
         </el-table-column>
-        <el-table-column label="Actions" width="60" fixed="right">
+        <el-table-column label="Actions" width="90" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
               <el-popconfirm

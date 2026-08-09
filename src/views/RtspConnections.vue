@@ -21,10 +21,10 @@
         <el-table-column prop="id" label="ID" width="280" show-overflow-tooltip />
         <el-table-column label="Remote Address" prop="remoteAddr" min-width="160" />
         <el-table-column label="Tunnel" prop="tunnel" width="100" />
-        <el-table-column label="Inbound" width="110" sortable prop="inboundBytes">
+        <el-table-column label="Inbound" width="120" sortable prop="inboundBytes">
           <template #default="{ row }">{{ formatBytes(row.inboundBytes || 0) }}</template>
         </el-table-column>
-        <el-table-column label="Outbound" width="110" sortable prop="outboundBytes">
+        <el-table-column label="Outbound" width="120" sortable prop="outboundBytes">
           <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
         </el-table-column>
         <el-table-column
