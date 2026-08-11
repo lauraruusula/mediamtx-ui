@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useSystemStore } from './stores/system'
 import { useActivityStore } from './stores/activity'
+import { useConfigStore, type ProtocolKey } from './stores/config'
 import { useRoute } from 'vue-router'
 import { formatUptime, formatRelativeTime, formatVersion } from './composables/useFormatters'
 import { getPaths } from './api/system'
@@ -35,8 +36,16 @@ const route = useRoute()
 const themeStore = useThemeStore()
 const systemStore = useSystemStore()
 const activityStore = useActivityStore()
+const configStore = useConfigStore()
 const appVersion = __APP_VERSION__
 const paletteVisible = ref(false)
+
+// The connection pages for disabled protocols would 404 server-side, so their
+// nav entries are hidden until the global config confirms the protocol is on.
+const CONNECTION_MENU_PROTOCOLS: ProtocolKey[] = ['rtsp', 'rtmp', 'webrtc', 'hls', 'srt']
+const showConnectionsMenu = computed(() =>
+  CONNECTION_MENU_PROTOCOLS.some(p => configStore.protocolEnabled(p))
+)
 
 const toggleSidebar = () => {
   isCollapse.value = !isCollapse.value
@@ -103,6 +112,8 @@ onMounted(() => {
   window.addEventListener('resize', checkIsMobile)
   window.addEventListener('keydown', onGlobalKeydown)
   systemStore.fetchInfo().catch(() => {})
+  // Needed for protocol-aware nav; safe to ignore failures (falls back to shown).
+  configStore.ensureLoaded().catch(() => {})
   alertTimer = setInterval(checkPathAlerts, 15000)
 })
 
@@ -170,32 +181,32 @@ watch(
           </el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="connections">
+        <el-sub-menu v-if="showConnectionsMenu" index="connections">
           <template #title>
             <el-icon><Link /></el-icon>
             <span>Connection Management</span>
           </template>
-          <el-menu-item index="/rtsp/connections">
+          <el-menu-item v-if="configStore.protocolEnabled('rtsp')" index="/rtsp/connections">
             <el-icon><Monitor /></el-icon>
             <span>RTSP Connections</span>
           </el-menu-item>
-          <el-menu-item index="/rtsp/sessions">
+          <el-menu-item v-if="configStore.protocolEnabled('rtsp')" index="/rtsp/sessions">
             <el-icon><User /></el-icon>
             <span>RTSP Sessions</span>
           </el-menu-item>
-          <el-menu-item index="/rtmp/connections">
+          <el-menu-item v-if="configStore.protocolEnabled('rtmp')" index="/rtmp/connections">
             <el-icon><Film /></el-icon>
             <span>RTMP Connections</span>
           </el-menu-item>
-          <el-menu-item index="/webrtc/sessions">
+          <el-menu-item v-if="configStore.protocolEnabled('webrtc')" index="/webrtc/sessions">
             <el-icon><VideoCamera /></el-icon>
             <span>WebRTC Sessions</span>
           </el-menu-item>
-          <el-menu-item index="/hls/muxers">
+          <el-menu-item v-if="configStore.protocolEnabled('hls')" index="/hls/muxers">
             <el-icon><Files /></el-icon>
             <span>HLS Muxers</span>
           </el-menu-item>
-          <el-menu-item index="/srt/connections">
+          <el-menu-item v-if="configStore.protocolEnabled('srt')" index="/srt/connections">
             <el-icon><Promotion /></el-icon>
             <span>SRT Connections</span>
           </el-menu-item>

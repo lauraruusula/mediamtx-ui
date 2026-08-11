@@ -62,6 +62,7 @@ import {
 } from '@element-plus/icons-vue'
 import { usePathsStore } from '@/stores/paths'
 import { useRecordingsStore } from '@/stores/recordings'
+import { useConfigStore, type ProtocolKey } from '@/stores/config'
 
 const props = defineProps<{
   visible: boolean
@@ -74,6 +75,7 @@ const emit = defineEmits<{
 const router = useRouter()
 const pathsStore = usePathsStore()
 const recordingsStore = useRecordingsStore()
+const configStore = useConfigStore()
 
 const visible = computed({
   get: () => props.visible,
@@ -99,6 +101,7 @@ interface PaletteItem {
   label: string
   hint?: string
   icon: Component
+  protocolKey?: ProtocolKey
   run: () => void
 }
 
@@ -129,6 +132,7 @@ const NAV_ITEMS: PaletteItem[] = [
     group: 'Pages',
     label: 'RTSP Connections',
     icon: Monitor,
+    protocolKey: 'rtsp',
     run: () => router.push('/rtsp/connections')
   },
   {
@@ -136,6 +140,7 @@ const NAV_ITEMS: PaletteItem[] = [
     group: 'Pages',
     label: 'RTSP Sessions',
     icon: User,
+    protocolKey: 'rtsp',
     run: () => router.push('/rtsp/sessions')
   },
   {
@@ -143,6 +148,7 @@ const NAV_ITEMS: PaletteItem[] = [
     group: 'Pages',
     label: 'RTMP Connections',
     icon: Film,
+    protocolKey: 'rtmp',
     run: () => router.push('/rtmp/connections')
   },
   {
@@ -150,6 +156,7 @@ const NAV_ITEMS: PaletteItem[] = [
     group: 'Pages',
     label: 'WebRTC Sessions',
     icon: VideoCamera,
+    protocolKey: 'webrtc',
     run: () => router.push('/webrtc/sessions')
   },
   {
@@ -157,6 +164,7 @@ const NAV_ITEMS: PaletteItem[] = [
     group: 'Pages',
     label: 'HLS Muxers',
     icon: Files,
+    protocolKey: 'hls',
     run: () => router.push('/hls/muxers')
   },
   {
@@ -164,6 +172,7 @@ const NAV_ITEMS: PaletteItem[] = [
     group: 'Pages',
     label: 'SRT Connections',
     icon: Promotion,
+    protocolKey: 'srt',
     run: () => router.push('/srt/connections')
   },
   {
@@ -181,6 +190,12 @@ const NAV_ITEMS: PaletteItem[] = [
     run: () => router.push('/config')
   }
 ]
+
+// Pages for disabled protocols would 404 server-side, so they're hidden from
+// the palette until the global config confirms the protocol is on.
+const navItems = computed<PaletteItem[]>(() =>
+  NAV_ITEMS.filter(item => !item.protocolKey || configStore.protocolEnabled(item.protocolKey))
+)
 
 const pathItems = computed<PaletteItem[]>(() =>
   pathsStore.list.map(p => ({
@@ -207,7 +222,7 @@ const recordingItems = computed<PaletteItem[]>(() =>
 const items = computed(() => {
   const q = query.value.trim().toLowerCase()
   const match = (label: string) => !q || label.toLowerCase().includes(q)
-  const filtered = [...NAV_ITEMS, ...pathItems.value, ...recordingItems.value].filter(i =>
+  const filtered = [...navItems.value, ...pathItems.value, ...recordingItems.value].filter(i =>
     match(i.label)
   )
   return q ? filtered : filtered.slice(0, MAX_EMPTY_QUERY_ITEMS)
@@ -244,6 +259,7 @@ watch(visible, async v => {
   activeIndex.value = 0
   await nextTick()
   inputEl.value?.focus()
+  configStore.ensureLoaded().catch(() => {})
   if (!pathsLoaded) {
     pathsLoaded = true
     pathsStore.fetchList(0, 1000).catch(() => {})
