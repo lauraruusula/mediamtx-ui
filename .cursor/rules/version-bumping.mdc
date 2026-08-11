@@ -1,0 +1,24 @@
+---
+description: Always bump the package.json version before committing and pushing
+alwaysApply: true
+---
+
+# Version Bumping
+
+Every time you commit and push changes to this repository, you MUST bump the app version first.
+
+## Rules
+
+1. **Bump before commit**: Edit `version` in `package.json` (currently `2.0.1`) before creating a commit that will be pushed.
+2. **Semantic versioning**:
+   - **Patch** (e.g. `2.0.1` → `2.0.2`): bug fixes, small tweaks, performance changes.
+   - **Minor** (e.g. `2.0.1` → `2.1.0`): new features, non-breaking additions.
+   - **Major** (e.g. `2.0.1` → `3.0.0`): breaking changes or major redesigns.
+3. **Include the bump in the same commit** as the changes it accompanies — do not create a separate version-only commit.
+4. **Mention the new version** in the commit message (e.g. `v2.0.1`).
+5. `__APP_VERSION__` is injected from `package.json` at build time via `vite.config.ts`, and is shown in the sidebar footer — no other file needs updating for a version bump.
+
+## Examples
+
+- Fixing a bug → bump `2.0.1` → `2.0.2`, commit message includes `v2.0.2`.
+- Adding a feature → bump `2.0.1` → `2.1.0`, commit message includes `v2.1.0`.
