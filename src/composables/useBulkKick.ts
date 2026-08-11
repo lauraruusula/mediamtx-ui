@@ -1,7 +1,6 @@
 import { ref, reactive, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useActivityStore } from '@/stores/activity'
-import { getErrorMessage } from './useErrorMessage'
 
 interface Kickable {
   id: string
@@ -31,15 +30,20 @@ export function useBulkKick(store: { kick: (id: string) => Promise<void> }, labe
     if (!rows.length) return
     kicking.value = true
     try {
-      for (const row of rows) {
-        await store.kick(row.id)
-        activityStore.log(`Kicked a ${label} (${row.id.slice(0, 8)}…)`, 'error')
+      // Fire all kicks at once — waiting for them in sequence makes large
+      // selections feel sluggish. Individual failures don't abort the rest.
+      const results = await Promise.allSettled(rows.map(row => store.kick(row.id)))
+      const succeeded = results.filter(r => r.status === 'fulfilled').length
+      const failed = rows.length - succeeded
+      if (succeeded > 0) {
+        ElMessage.success(`Kicked ${succeeded} ${label}${succeeded > 1 ? 's' : ''}`)
+        activityStore.log(`Kicked ${succeeded} ${label}${succeeded > 1 ? 's' : ''}`, 'error')
       }
-      ElMessage.success(`Kicked ${rows.length} ${label}${rows.length > 1 ? 's' : ''}`)
+      if (failed > 0) {
+        ElMessage.error(`Failed to kick ${failed} of ${rows.length} ${label}s`)
+      }
       selection.value = []
       table?.value?.clearSelection()
-    } catch (err) {
-      ElMessage.error(getErrorMessage(err, `Failed to kick ${label}`))
     } finally {
       kicking.value = false
     }

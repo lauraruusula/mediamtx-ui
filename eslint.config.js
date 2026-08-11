@@ -13,6 +13,7 @@ export default [
   ...vue.configs['flat/recommended'],
   prettier,
   {
+    name: 'app/base',
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -22,6 +23,7 @@ export default [
       },
       ecmaVersion: 'latest',
       sourceType: 'module',
+      // vue-eslint-parser reads `parserOptions.parser` for <script lang="ts"> blocks.
       parserOptions: {
         parser: typescriptParser
       }
@@ -33,6 +35,30 @@ export default [
       ...typescriptEslint.configs.recommended.rules,
       'vue/multi-word-component-names': 'off',
       '@typescript-eslint/no-explicit-any': 'off'
+    }
+  },
+  {
+    name: 'app/typescript',
+    files: ['**/*.ts', '**/*.mts', '**/*.cts'],
+    languageOptions: {
+      parser: typescriptParser,
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        __APP_VERSION__: 'readonly'
+      },
+      ecmaVersion: 'latest',
+      sourceType: 'module'
+    },
+    plugins: {
+      '@typescript-eslint': typescriptEslint
+    },
+    rules: {
+      ...typescriptEslint.configs.recommended.rules,
+      '@typescript-eslint/no-explicit-any': 'off',
+      // TypeScript's own lib types (RTCIceServer, etc.) aren't visible to this
+      // rule, and vue-tsc catches real undeclared variables at compile time.
+      'no-undef': 'off'
     }
   }
 ]

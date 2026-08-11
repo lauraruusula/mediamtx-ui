@@ -18,8 +18,7 @@ export const replacePathConfig = (name: string, config: any) =>
 export const deletePathConfig = (name: string) =>
   api.delete(`/v3/config/paths/delete/${encodeURIComponent(name)}`)
 
-export const getPathConfigDefaults = () =>
-  api.get('/v3/config/pathdefaults/get')
+export const getPathConfigDefaults = () => api.get('/v3/config/pathdefaults/get')
 
 export const updatePathConfigDefaults = (config: any) =>
   api.patch('/v3/config/pathdefaults/patch', config)

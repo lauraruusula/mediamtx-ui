@@ -6,13 +6,13 @@ const api = axios.create({
 })
 
 api.interceptors.request.use(
-  (config) => config,
-  (error) => Promise.reject(error)
+  config => config,
+  error => Promise.reject(error)
 )
 
 api.interceptors.response.use(
-  (response) => response.data,
-  (error) => Promise.reject(error)
+  response => response.data,
+  error => Promise.reject(error)
 )
 
 export default api

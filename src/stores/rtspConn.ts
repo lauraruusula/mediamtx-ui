@@ -11,7 +11,10 @@ export const useRtspConnStore = defineStore('rtspConn', () => {
   const fetchList = async (page = 0, itemsPerPage = 100) => {
     loading.value = true
     try {
-      const res = await getRTSPConnections(page, itemsPerPage) as unknown as APIListResponse<APIRTSPConn>
+      const res = (await getRTSPConnections(
+        page,
+        itemsPerPage
+      )) as unknown as APIListResponse<APIRTSPConn>
       list.value = res.items || []
       itemCount.value = res.itemCount || 0
     } finally {

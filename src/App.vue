@@ -7,6 +7,7 @@ import { useRoute } from 'vue-router'
 import { formatUptime, formatRelativeTime, formatVersion } from './composables/useFormatters'
 import { getPaths } from './api/system'
 import CommandPalette from './components/CommandPalette.vue'
+import UptimeText from './components/UptimeText.vue'
 import {
   VideoCamera,
   Odometer,
@@ -64,24 +65,34 @@ const onGlobalKeydown = (e: KeyboardEvent) => {
 let previousOnline: Record<string, boolean> = {}
 let alertTimer: ReturnType<typeof setInterval> | null = null
 
+const diffPathStates = (items: { name: string; online: boolean }[]) => {
+  const current: Record<string, boolean> = {}
+  for (const p of items) current[p.name] = p.online
+  const names = new Set([...Object.keys(previousOnline), ...Object.keys(current)])
+  for (const name of names) {
+    const was = previousOnline[name]
+    const now = current[name]
+    if (was !== undefined && now !== undefined && was !== now) {
+      activityStore.log(
+        now ? `Path "${name}" came online` : `Path "${name}" went offline`,
+        now ? 'success' : 'error'
+      )
+    }
+  }
+  previousOnline = current
+}
+
 const checkPathAlerts = async () => {
   if (document.hidden) return
+  // On the dashboard the system store already polls the full path list every
+  // 5s — diff that instead of issuing a duplicate request every 15s.
+  if (route.path === '/') {
+    diffPathStates(systemStore.paths)
+    return
+  }
   try {
     const res = (await getPaths(0, 1000)) as { items?: { name: string; online: boolean }[] }
-    const current: Record<string, boolean> = {}
-    for (const p of res.items || []) current[p.name] = p.online
-    const names = new Set([...Object.keys(previousOnline), ...Object.keys(current)])
-    for (const name of names) {
-      const was = previousOnline[name]
-      const now = current[name]
-      if (was !== undefined && now !== undefined && was !== now) {
-        activityStore.log(
-          now ? `Path "${name}" came online` : `Path "${name}" went offline`,
-          now ? 'success' : 'error'
-        )
-      }
-    }
-    previousOnline = current
+    diffPathStates(res.items || [])
   } catch {
     // Server unreachable — skip this round
   }
@@ -256,7 +267,7 @@ watch(
           >
             <div class="server-pill">
               <span :class="['status-dot', { offline: !systemStore.connected }]" />
-              <span v-if="systemStore.connected">{{ formatUptime(systemStore.info.started) }}</span>
+              <UptimeText v-if="systemStore.connected" :started="systemStore.info?.started" />
               <span v-else>Offline</span>
             </div>
           </el-tooltip>

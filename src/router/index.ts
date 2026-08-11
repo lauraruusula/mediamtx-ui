@@ -72,7 +72,7 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to) => {
+router.beforeEach(to => {
   document.title = `${to.meta.title || 'MediaMTX'} - MediaMTX Admin`
 })
 

@@ -260,8 +260,16 @@ const showDetail = (row: APIRecording) => {
 
 // Segments are looked up by their start timestamp, not a table index, so
 // sorting or paging the segments table never misaligns play/download/delete.
-const segmentIndex = (start: string) =>
-  currentRecording.value?.segments?.findIndex(s => s.start === start) ?? -1
+// The map is rebuilt once per recording (O(n) total) instead of scanning all
+// segments for every row in the table on each render.
+const segmentIndexMap = computed(() => {
+  const map = new Map<string, number>()
+  const segments = currentRecording.value?.segments || []
+  for (let i = 0; i < segments.length; i++) map.set(segments[i].start, i)
+  return map
+})
+
+const segmentIndex = (start: string) => segmentIndexMap.value.get(start) ?? -1
 
 const segmentUrl = (start: string) => {
   const i = segmentIndex(start)

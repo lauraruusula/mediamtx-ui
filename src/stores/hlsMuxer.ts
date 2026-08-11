@@ -11,7 +11,10 @@ export const useHlsMuxerStore = defineStore('hlsMuxer', () => {
   const fetchList = async (page = 0, itemsPerPage = 100) => {
     loading.value = true
     try {
-      const res = await listHlsMuxers(page, itemsPerPage) as unknown as APIListResponse<APIHLSMuxer>
+      const res = (await listHlsMuxers(
+        page,
+        itemsPerPage
+      )) as unknown as APIListResponse<APIHLSMuxer>
       list.value = res.items || []
       itemCount.value = res.itemCount || 0
     } finally {

@@ -12,7 +12,7 @@ export const usePathsStore = defineStore('paths', () => {
   const fetchList = async (page = 0, itemsPerPage = 100) => {
     loading.value = true
     try {
-      const res = await getPaths(page, itemsPerPage) as unknown as APIListResponse<APIPath>
+      const res = (await getPaths(page, itemsPerPage)) as unknown as APIListResponse<APIPath>
       list.value = res.items || []
       pageCount.value = res.pageCount || 0
       itemCount.value = res.itemCount || 0

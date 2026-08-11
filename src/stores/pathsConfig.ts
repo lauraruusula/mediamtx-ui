@@ -18,7 +18,7 @@ export const usePathsConfigStore = defineStore('pathsConfig', () => {
   const fetchList = async (page = 0, itemsPerPage = 100) => {
     loading.value = true
     try {
-      const res = await api.getPathsConfig(page, itemsPerPage) as any
+      const res = (await api.getPathsConfig(page, itemsPerPage)) as any
       list.value = res.items || []
       pageCount.value = res.pageCount || 0
       itemCount.value = res.itemCount || 0
@@ -28,7 +28,7 @@ export const usePathsConfigStore = defineStore('pathsConfig', () => {
   }
 
   const fetchOne = async (name: string) => {
-    const res = await api.getPathConfig(name) as any
+    const res = (await api.getPathConfig(name)) as any
     current.value = res
     return res
   }
@@ -50,7 +50,7 @@ export const usePathsConfigStore = defineStore('pathsConfig', () => {
   }
 
   const fetchDefaults = async () => {
-    const res = await api.getPathConfigDefaults() as any
+    const res = (await api.getPathConfigDefaults()) as any
     defaults.value = res
   }
 

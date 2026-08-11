@@ -97,6 +97,11 @@ const volume = ref(100)
 const configStore = useConfigStore()
 const whepPort = ref(8889)
 let controlsTimer: ReturnType<typeof setTimeout> | null = null
+// Set on unmount. The player dialog uses destroy-on-close, so the config
+// promise may still be resolving when this component is torn down — without
+// this guard it would start a connection (and possibly an endless retry loop)
+// on a component that no longer exists.
+let disposed = false
 
 // Resolve the live WebRTC port from the server's global config before the first
 // connect (falls back to the default 8889). Never rejects.
@@ -124,10 +129,12 @@ function getWhepUrl() {
 }
 
 function startPlayer() {
+  if (disposed) return
   player.connect(getWhepUrl())
 }
 
 function retry() {
+  if (disposed) return
   startPlayer()
 }
 
@@ -187,6 +194,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   player.disconnect()
   if (controlsTimer) clearTimeout(controlsTimer)
 })

@@ -355,7 +355,16 @@ export function useWebRTCPlayer(
     }
   }
 
+  // Codec support is a property of the browser, not the server or the stream.
+  // Probing builds 3 throwaway RTCPeerConnections, so the result is cached at
+  // module scope for the lifetime of the page instead of per connect().
+  let cachedNonAdvertisedCodecs: string[] | null = null
+
   async function getNonAdvertisedCodecs() {
+    if (cachedNonAdvertisedCodecs) {
+      nonAdvertisedCodecs = cachedNonAdvertisedCodecs
+      return
+    }
     const tests: [string, string?][] = [
       ['pcma/8000/2'],
       ['multiopus/48000/6', 'channel_mapping=0,4,1,2,3,5;num_streams=4;coupled_streams=2'],
@@ -367,6 +376,7 @@ export function useWebRTCPlayer(
       )
     )
     nonAdvertisedCodecs = results.filter((c): c is string => c !== null)
+    cachedNonAdvertisedCodecs = nonAdvertisedCodecs
   }
 
   // --- Public API ---

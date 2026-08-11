@@ -8,7 +8,10 @@
     "dev": "vite",
     "dev:api": "cd ../mediamtx && go build -o mediamtx . && ./mediamtx ../mediamtx-ui/mediamtx-dev.yml",
     "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.{ts,vue,js,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,vue,js,css}\""
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

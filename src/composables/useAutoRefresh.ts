@@ -33,6 +33,9 @@ export function useAutoRefresh(
     active.value = true
     persist()
     timer = setInterval(async () => {
+      // Background tabs get their timers throttled anyway, and nothing on
+      // screen needs refreshing while hidden — skip the request entirely.
+      if (document.hidden) return
       // Skip a tick when the previous call hasn't finished yet (slow API on a
       // 5s interval) so requests never stack up and loading state stays clean.
       if (inFlight) return
@@ -56,8 +59,13 @@ export function useAutoRefresh(
     persist()
   }
 
+  // el-switch binds to `active` via v-model and fires @change afterwards —
+  // `update:modelValue` is emitted first, so by the time `toggle()` runs the
+  // ref already holds the *new* value. Match the timer to it rather than
+  // inverting the old state (which would always snap the switch back).
   const toggle = () => {
-    active.value ? stop() : start()
+    if (active.value) start()
+    else stop()
   }
 
   // Unmount only stops polling — it must not flip (or persist) the toggle state.

@@ -113,7 +113,7 @@
               size="small"
               :loading="systemStore.loading"
               aria-label="Refresh"
-              @click="refreshData"
+              @click="handleRefresh"
             />
           </div>
         </div>
@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
 import { useSystemStore } from '@/stores/system'
 import { useThemeStore } from '@/stores/theme'
 import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
@@ -205,6 +205,10 @@ import StreamPlayer from '@/components/StreamPlayer.vue'
 import CopyLinkButton from '@/components/CopyLinkButton.vue'
 import { useCountUp } from '@/composables/useCountUp'
 import type { APIPath } from '@/types/api'
+
+// ECharts is only used on this page, so it's bundled as a separate chunk that
+// starts loading when the dashboard first renders instead of on app boot.
+const VChart = defineAsyncComponent(() => import('@/echarts').then(m => m.VChart))
 
 const SAMPLE_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 const AUTO_REFRESH_INTERVAL_S = SAMPLE_INTERVAL_S
@@ -407,10 +411,19 @@ const bandwidthTrendOption = computed(() => {
 })
 
 const refreshData = async () => {
-  await systemStore.fetchAll()
-  initialLoading.value = false
-  recordBandwidthSample()
-  lastUpdated.markUpdated()
+  try {
+    await systemStore.fetchAll()
+    recordBandwidthSample()
+    lastUpdated.markUpdated()
+  } finally {
+    // Clear the one-shot loading mask even when the first fetch fails —
+    // otherwise it stays on and keeps flashing over every refresh tick.
+    initialLoading.value = false
+  }
+}
+
+const handleRefresh = () => {
+  refreshData().catch(() => {})
 }
 
 // Unlike other list views, auto refresh defaults on here — the dashboard is a

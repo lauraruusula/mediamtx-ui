@@ -9,29 +9,6 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 
-// ECharts
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart, BarChart, LineChart } from 'echarts/charts'
-import {
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent
-} from 'echarts/components'
-import VChart from 'vue-echarts'
-
-use([
-  CanvasRenderer,
-  PieChart,
-  BarChart,
-  LineChart,
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent
-])
-
 // Initialize theme
 const savedTheme = localStorage.getItem('theme')
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -42,7 +19,6 @@ document.documentElement.setAttribute('data-theme', theme)
 
 const app = createApp(App)
 
-app.component('VChart', VChart)
 app.use(createPinia())
 app.use(router)
 app.mount('#app')

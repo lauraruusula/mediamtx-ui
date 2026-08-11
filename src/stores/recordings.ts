@@ -11,7 +11,10 @@ export const useRecordingsStore = defineStore('recordings', () => {
   const fetchList = async (page = 0, itemsPerPage = 100) => {
     loading.value = true
     try {
-      const res = await listRecordings(page, itemsPerPage) as unknown as APIListResponse<APIRecording>
+      const res = (await listRecordings(
+        page,
+        itemsPerPage
+      )) as unknown as APIListResponse<APIRecording>
       list.value = res.items || []
       itemCount.value = res.itemCount || 0
     } finally {

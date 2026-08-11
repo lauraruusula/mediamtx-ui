@@ -53,7 +53,8 @@
           width="170"
           sortable
           :sort-method="
-            (a: any, b: any) => new Date(a.created).getTime() - new Date(b.created).getTime()
+            (a: any, b: any) =>
+              (new Date(a.created).getTime() || 0) - (new Date(b.created).getTime() || 0)
           "
         >
           <template #default="{ row }">{{ formatDate(row.created) }}</template>
@@ -64,7 +65,7 @@
           sortable
           :sort-method="
             (a: any, b: any) =>
-              new Date(a.lastRequest).getTime() - new Date(b.lastRequest).getTime()
+              (new Date(a.lastRequest).getTime() || 0) - (new Date(b.lastRequest).getTime() || 0)
           "
         >
           <template #default="{ row }">{{ formatDate(row.lastRequest) }}</template>

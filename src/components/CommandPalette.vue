@@ -83,7 +83,15 @@ const visible = computed({
 const query = ref('')
 const inputEl = ref<HTMLInputElement | null>(null)
 const activeIndex = ref(0)
-let dataLoaded = false
+// Paths are small and make the palette useful immediately, so they load on
+// first open. Recordings can carry thousands of segments each, so they're
+// only fetched once the user actually starts typing.
+let pathsLoaded = false
+let recordingsLoaded = false
+const recordingsLoading = ref(false)
+// With an empty query the palette would render every path at once — cap it to
+// keep the first open snappy. Typed queries show all matches.
+const MAX_EMPTY_QUERY_ITEMS = 100
 
 interface PaletteItem {
   key: string
@@ -199,7 +207,10 @@ const recordingItems = computed<PaletteItem[]>(() =>
 const items = computed(() => {
   const q = query.value.trim().toLowerCase()
   const match = (label: string) => !q || label.toLowerCase().includes(q)
-  return [...NAV_ITEMS, ...pathItems.value, ...recordingItems.value].filter(i => match(i.label))
+  const filtered = [...NAV_ITEMS, ...pathItems.value, ...recordingItems.value].filter(i =>
+    match(i.label)
+  )
+  return q ? filtered : filtered.slice(0, MAX_EMPTY_QUERY_ITEMS)
 })
 
 const groups = computed(() => {
@@ -214,21 +225,34 @@ const groups = computed(() => {
     .map(([name, groupItems]) => ({ name, items: groupItems }))
 })
 
+const ensureRecordings = async () => {
+  if (recordingsLoaded || recordingsLoading.value) return
+  recordingsLoading.value = true
+  try {
+    await recordingsStore.fetchList(0, 1000)
+  } catch {
+    // Best-effort — the palette still works with pages and paths.
+  } finally {
+    recordingsLoaded = true
+    recordingsLoading.value = false
+  }
+}
+
 watch(visible, async v => {
   if (!v) return
   query.value = ''
   activeIndex.value = 0
   await nextTick()
   inputEl.value?.focus()
-  if (!dataLoaded) {
-    dataLoaded = true
-    // Best-effort preload so path/recording results aren't empty on first open.
-    Promise.allSettled([pathsStore.fetchList(0, 1000), recordingsStore.fetchList(0, 1000)])
+  if (!pathsLoaded) {
+    pathsLoaded = true
+    pathsStore.fetchList(0, 1000).catch(() => {})
   }
 })
 
-watch(query, () => {
+watch(query, q => {
   activeIndex.value = 0
+  if (q.trim()) ensureRecordings()
 })
 
 const move = (delta: number) => {

@@ -26,21 +26,25 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   // Watch for theme changes, updating the DOM and local storage
-  watch(currentTheme, (newTheme) => {
-    // Update the HTML element's class
-    document.documentElement.classList.remove('light', 'dark')
-    document.documentElement.classList.add(newTheme)
+  watch(
+    currentTheme,
+    newTheme => {
+      // Update the HTML element's class
+      document.documentElement.classList.remove('light', 'dark')
+      document.documentElement.classList.add(newTheme)
 
-    // Update the Element Plus theme
-    document.documentElement.setAttribute('data-theme', newTheme)
+      // Update the Element Plus theme
+      document.documentElement.setAttribute('data-theme', newTheme)
 
-    // Persist to local storage
-    localStorage.setItem('theme', newTheme)
-  }, { immediate: true })
-  
+      // Persist to local storage
+      localStorage.setItem('theme', newTheme)
+    },
+    { immediate: true }
+  )
+
   return {
     currentTheme,
     toggleTheme,
     setTheme
   }
-}) 
+})
