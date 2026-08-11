@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1>
-        Path Config <el-tag size="small" round>{{ store.itemCount }}</el-tag>
+        Path Config <el-tag size="small" round>{{ displayedCount }}</el-tag>
       </h1>
       <div class="page-actions">
         <el-input
@@ -14,12 +14,25 @@
         />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
+          :active-text="'Auto refresh'"
           @change="autoRefreshCtrl.toggle"
         />
+        <el-select
+          :model-value="autoRefreshCtrl.interval.value"
+          class="interval-select"
+          aria-label="Auto refresh interval"
+          @change="autoRefreshCtrl.setIntervalMs"
+        >
+          <el-option
+            v-for="ms in AUTO_REFRESH_INTERVAL_OPTIONS_MS"
+            :key="ms"
+            :label="`${ms / 1000}s`"
+            :value="ms"
+          />
+        </el-select>
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Download" @click="exportCsvData">Export</el-button>
-        <el-button type="primary" :icon="Plus" @click="showAddDialog">Add Path</el-button>
+        <el-button type="primary" :icon="Plus" @click="showAddDialog">Add Path Config</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
@@ -29,8 +42,8 @@
 
     <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
 
-    <el-card shadow="hover">
-      <el-table v-loading="store.loading" :data="filteredList" style="width: 100%">
+    <el-card shadow="never">
+      <el-table v-loading="initialLoading" :data="filteredList" style="width: 100%">
         <el-table-column prop="name" label="Path Name" min-width="200" show-overflow-tooltip />
         <el-table-column label="Source" min-width="220">
           <template #default="{ row }">
@@ -57,7 +70,7 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="90" fixed="right">
+        <el-table-column label="Actions" width="130" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
               <el-tooltip content="Edit" placement="top">
@@ -69,6 +82,16 @@
                   plain
                   aria-label="Edit"
                   @click="showEditDialog(row)"
+                />
+              </el-tooltip>
+              <el-tooltip content="Duplicate as a new path" placement="top">
+                <el-button
+                  :icon="CopyDocument"
+                  circle
+                  size="small"
+                  plain
+                  aria-label="Duplicate as a new path"
+                  @click="showCloneDialog(row)"
                 />
               </el-tooltip>
               <el-popconfirm
@@ -92,7 +115,7 @@
         </el-table-column>
       </el-table>
       <el-empty
-        v-if="!store.loading && filteredList.length === 0"
+        v-if="!error && !initialLoading && filteredList.length === 0"
         :description="
           search
             ? `No path configs match “${search}”`
@@ -288,17 +311,27 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { usePathsConfigStore } from '@/stores/pathsConfig'
 import { useActivityStore } from '@/stores/activity'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import {
+  useAutoRefresh,
+  AUTO_REFRESH_INTERVAL_MS,
+  AUTO_REFRESH_INTERVAL_OPTIONS_MS
+} from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
 import { useListError } from '@/composables/useListError'
 import { exportCsv } from '@/composables/useCsvExport'
 import { getErrorMessage } from '@/composables/useErrorMessage'
-import { ElMessage } from 'element-plus'
-import { Refresh, Search, Plus, Edit, Delete, Download } from '@element-plus/icons-vue'
+import { toast } from '@/composables/useToast'
+import {
+  Refresh,
+  Search,
+  Plus,
+  Edit,
+  Delete,
+  Download,
+  CopyDocument
+} from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
-
-const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = usePathsConfigStore()
 const activityStore = useActivityStore()
@@ -306,9 +339,20 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const activeTab = ref('source')
 const search = ref('')
+// The loading mask is only meaningful while the table has nothing to render —
+// showing it on every auto-refresh tick makes the panel flash. Once the first
+// fetch lands, refreshes update rows in place and the refresh button's own
+// spinner covers the loading state.
+const initialLoading = ref(true)
 
 const filteredList = computed(() =>
   filterList(store.list, search.value, (r: any) => r.name + ' ' + (r.source || ''))
+)
+
+// While searching, the badge reflects what's on screen rather than the server
+// total (the list is fetched in full and filtered client-side).
+const displayedCount = computed(() =>
+  search.value.trim() ? filteredList.value.length : store.itemCount
 )
 
 const emptyForm = () => ({
@@ -365,11 +409,9 @@ const showAddDialog = () => {
   dialogVisible.value = true
 }
 
-const showEditDialog = (row: any) => {
-  isEdit.value = true
-  activeTab.value = 'source'
+const fillFormFromRow = (row: any) => {
   Object.assign(form, emptyForm(), {
-    name: row.name,
+    name: row.name || '',
     source: row.source || '',
     sourceOnDemand: !!row.sourceOnDemand,
     publishUser: row.publishUser || '',
@@ -398,22 +440,45 @@ const showEditDialog = (row: any) => {
     recordSegmentDuration: row.recordSegmentDuration || '',
     recordPartDuration: row.recordPartDuration || ''
   })
+}
+
+const showEditDialog = (row: any) => {
+  isEdit.value = true
+  activeTab.value = 'source'
+  fillFormFromRow(row)
+  dialogVisible.value = true
+}
+
+const showCloneDialog = (row: any) => {
+  // Prefill everything from the source path but blank the name, so saving
+  // creates a new path config instead of overwriting the original.
+  isEdit.value = false
+  activeTab.value = 'source'
+  fillFormFromRow(row)
+  form.name = ''
   dialogVisible.value = true
 }
 
 const handleSave = async () => {
   if (!form.name) {
-    ElMessage.warning('Please enter a path name')
+    toast.warning('Please enter a path name')
     return
   }
   try {
     const { name, ...rest } = form
-    // MediaMTX rejects some empty-string fields outright (e.g. source: ''
-    // errors with "invalid source: ''" instead of being treated as "unset"),
-    // so omit blanks rather than sending them verbatim.
+    // MediaMTX copies every PATCHed field verbatim, so an empty string is what
+    // clears a field back to its default (empty publishUser = no auth, empty
+    // runOnReady = no hook, empty IP list = allow all). The one exception is
+    // `source`: MediaMTX rejects an empty string there, so an empty source is
+    // sent as the literal default value "publisher" (publish directly).
     const data: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(rest)) {
-      if (value !== '') data[key] = value
+      if (value === null || value === undefined) continue
+      if (key === 'source' && value === '') {
+        data[key] = 'publisher'
+      } else {
+        data[key] = value
+      }
     }
     if (isEdit.value) {
       await store.patch(name, data)
@@ -423,11 +488,11 @@ const handleSave = async () => {
     // Reload from the page the user is actually on — the store actions no
     // longer re-fetch, so pagination isn't silently reset to page 1.
     await loadData()
-    ElMessage.success(`Path config "${name}" saved`)
+    toast.success(`Path config "${name}" saved`)
     activityStore.log(`${isEdit.value ? 'Updated' : 'Added'} path config "${name}"`, 'success')
     dialogVisible.value = false
   } catch (err) {
-    ElMessage.error(getErrorMessage(err, 'Failed to save path config'))
+    toast.error(getErrorMessage(err, 'Failed to save path config'))
   }
 }
 
@@ -435,10 +500,10 @@ const handleDelete = async (name: string) => {
   try {
     await store.remove(name)
     await loadData()
-    ElMessage.success(`Path config "${name}" deleted`)
+    toast.success(`Path config "${name}" deleted`)
     activityStore.log(`Deleted path config "${name}"`, 'error')
   } catch (err) {
-    ElMessage.error(getErrorMessage(err, 'Failed to delete path config'))
+    toast.error(getErrorMessage(err, 'Failed to delete path config'))
   }
 }
 
@@ -457,6 +522,7 @@ const loadData = async () => {
     } else {
       await pagination.load()
     }
+    initialLoading.value = false
     lastUpdated.markUpdated()
   }, 'Failed to load path configs')
 }

@@ -67,6 +67,9 @@ export const useSystemStore = defineStore('system', () => {
     const res = (await getPaths(0, 1000)) as unknown as APIListResponse<APIPath>
     paths.value = res.items || []
     pathCount.value = res.itemCount || 0
+    // Any successful full-path fetch proves the API is reachable, so the
+    // header status can be restored without an extra /info round-trip.
+    connected.value = true
   }
 
   const fetchProtocolCounts = async () => {

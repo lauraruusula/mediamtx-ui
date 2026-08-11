@@ -52,7 +52,6 @@
           class="volume-slider"
           :max="100"
           :show-tooltip="false"
-          :disabled="isMuted"
           aria-label="Volume"
           @input="setVolume"
         />
@@ -149,8 +148,12 @@ function setVolume(v: number | number[]) {
   const value = Array.isArray(v) ? v[0] : v
   if (videoEl.value) {
     videoEl.value.volume = value / 100
-    // Dragging the slider back up also unmutes.
-    if (value > 0 && videoEl.value.muted) {
+    if (value === 0) {
+      // A zeroed slider is effectively muted — keep the mute button in sync.
+      videoEl.value.muted = true
+      isMuted.value = true
+    } else if (videoEl.value.muted) {
+      // Dragging the slider back up also unmutes.
       videoEl.value.muted = false
       isMuted.value = false
     }

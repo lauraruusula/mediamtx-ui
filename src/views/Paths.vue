@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1>
-        Path Status <el-tag size="small" round>{{ store.itemCount }}</el-tag>
+        Path Status <el-tag size="small" round>{{ displayedCount }}</el-tag>
       </h1>
       <div class="page-actions">
         <el-input
@@ -20,9 +20,22 @@
         </el-select>
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
+          :active-text="'Auto refresh'"
           @change="autoRefreshCtrl.toggle"
         />
+        <el-select
+          :model-value="autoRefreshCtrl.interval.value"
+          class="interval-select"
+          aria-label="Auto refresh interval"
+          @change="autoRefreshCtrl.setIntervalMs"
+        >
+          <el-option
+            v-for="ms in AUTO_REFRESH_INTERVAL_OPTIONS_MS"
+            :key="ms"
+            :label="`${ms / 1000}s`"
+            :value="ms"
+          />
+        </el-select>
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Download" @click="exportCsvData">Export</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
@@ -34,9 +47,9 @@
 
     <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
 
-    <el-card shadow="hover">
+    <el-card shadow="never">
       <el-table
-        v-loading="store.loading"
+        v-loading="initialLoading"
         :data="filteredList"
         style="width: 100%"
         :default-sort="sort.defaultSort"
@@ -124,7 +137,7 @@
         </el-table-column>
       </el-table>
       <el-empty
-        v-if="!store.loading && filteredList.length === 0"
+        v-if="!error && !initialLoading && filteredList.length === 0"
         :description="emptyDescription"
       />
       <div v-if="!search && statusFilter === 'all' && store.itemCount > 0" class="pagination-bar">
@@ -145,16 +158,26 @@
       <template #header>
         <div class="drawer-header">
           <span class="drawer-title">{{ currentPath?.name }}</span>
-          <el-button
-            v-if="currentPath?.online"
-            type="success"
-            size="small"
-            plain
-            :icon="VideoPlay"
-            @click="playFromDrawer"
-          >
-            Play
-          </el-button>
+          <div class="drawer-actions">
+            <el-button
+              :icon="Refresh"
+              circle
+              size="small"
+              :loading="refreshingPath"
+              aria-label="Refresh path details"
+              @click="refreshPath"
+            />
+            <el-button
+              v-if="currentPath?.online"
+              type="success"
+              size="small"
+              plain
+              :icon="VideoPlay"
+              @click="playFromDrawer"
+            >
+              Play
+            </el-button>
+          </div>
         </div>
       </template>
       <el-descriptions v-if="currentPath" :column="1" border>
@@ -236,7 +259,11 @@ import { useRoute } from 'vue-router'
 import { usePathsStore } from '@/stores/paths'
 import { useConfigStore } from '@/stores/config'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import {
+  useAutoRefresh,
+  AUTO_REFRESH_INTERVAL_MS,
+  AUTO_REFRESH_INTERVAL_OPTIONS_MS
+} from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
 import { useListError } from '@/composables/useListError'
@@ -250,14 +277,13 @@ import {
 } from '@/composables/useStreamUrls'
 import { copyToClipboard } from '@/composables/useClipboard'
 import { formatBytes, formatSourceType } from '@/composables/useFormatters'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
+import { getErrorMessage } from '@/composables/useErrorMessage'
 import { Refresh, Search, Download, DocumentCopy, VideoPlay, View } from '@element-plus/icons-vue'
 import StreamPlayer from '@/components/StreamPlayer.vue'
 import CopyLinkButton from '@/components/CopyLinkButton.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import type { APIPath, APIPathTrack } from '@/types/api'
-
-const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = usePathsStore()
 const configStore = useConfigStore()
@@ -269,10 +295,16 @@ const statusFilter = ref<'all' | 'online' | 'available' | 'offline'>('all')
 
 const drawerVisible = ref(false)
 const currentPath = ref<APIPath | null>(null)
+const refreshingPath = ref(false)
 const playerVisible = ref(false)
 const playingPath = ref('')
 const streamCfg = ref<StreamUrlConfig>({ ports: {}, enabled: {} })
 const portsLoaded = ref(false)
+// The loading mask is only meaningful while the table has nothing to render —
+// showing it on every auto-refresh tick makes the panel flash. Once the first
+// fetch lands, refreshes update rows in place and the refresh button's own
+// spinner covers the loading state.
+const initialLoading = ref(true)
 const { error, run } = useListError()
 const sort = useTableSort('sort:paths')
 
@@ -310,6 +342,12 @@ const emptyDescription = computed(() => {
   return 'No paths yet'
 })
 
+// While searching/filtering, the badge reflects what's on screen rather than
+// the server total (the list is fetched in full and filtered client-side).
+const displayedCount = computed(() =>
+  search.value.trim() || statusFilter.value !== 'all' ? filteredList.value.length : store.itemCount
+)
+
 const streamUrls = computed(() =>
   currentPath.value
     ? buildStreamUrls(
@@ -323,9 +361,11 @@ const streamUrls = computed(() =>
 
 const copyUrl = async (u: StreamUrl) => {
   const ok = await copyToClipboard(u.url)
-  ElMessage[ok ? 'success' : 'error'](
-    ok ? `Copied ${u.label} URL to clipboard` : 'Could not copy to clipboard'
-  )
+  if (ok) {
+    toast.success(`Copied ${u.label} URL to clipboard`)
+  } else {
+    toast.error('Could not copy to clipboard')
+  }
 }
 
 const trackLabel = (t: APIPathTrack) => {
@@ -355,6 +395,18 @@ const showDetail = (row: APIPath) => {
   drawerVisible.value = true
 }
 
+const refreshPath = async () => {
+  if (!currentPath.value) return
+  refreshingPath.value = true
+  try {
+    currentPath.value = await store.fetchOne(currentPath.value.name)
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Failed to refresh path details'))
+  } finally {
+    refreshingPath.value = false
+  }
+}
+
 const openPlayer = (row: APIPath) => {
   playingPath.value = row.name
   playerVisible.value = true
@@ -382,6 +434,7 @@ const loadData = async () => {
     } else {
       await pagination.load()
     }
+    initialLoading.value = false
     lastUpdated.markUpdated()
   }, 'Failed to load paths')
 }
@@ -410,6 +463,12 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .drawer-title {

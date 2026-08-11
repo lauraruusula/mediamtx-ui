@@ -61,8 +61,9 @@ import {
   Folder
 } from '@element-plus/icons-vue'
 import { usePathsStore } from '@/stores/paths'
-import { useRecordingsStore } from '@/stores/recordings'
+import { listRecordings } from '@/api/recordings'
 import { useConfigStore, type ProtocolKey } from '@/stores/config'
+import type { APIRecording, APIListResponse } from '@/types/api'
 
 const props = defineProps<{
   visible: boolean
@@ -74,7 +75,6 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const pathsStore = usePathsStore()
-const recordingsStore = useRecordingsStore()
 const configStore = useConfigStore()
 
 const visible = computed({
@@ -87,10 +87,13 @@ const inputEl = ref<HTMLInputElement | null>(null)
 const activeIndex = ref(0)
 // Paths are small and make the palette useful immediately, so they load on
 // first open. Recordings can carry thousands of segments each, so they're
-// only fetched once the user actually starts typing.
+// only fetched once the user actually starts typing — and capped to a recent
+// window so a busy server's full recording history never stalls the palette.
 let pathsLoaded = false
 let recordingsLoaded = false
 const recordingsLoading = ref(false)
+const recordings = ref<APIRecording[]>([])
+const MAX_PALETTE_RECORDINGS = 200
 // With an empty query the palette would render every path at once — cap it to
 // keep the first open snappy. Typed queries show all matches.
 const MAX_EMPTY_QUERY_ITEMS = 100
@@ -209,7 +212,7 @@ const pathItems = computed<PaletteItem[]>(() =>
 )
 
 const recordingItems = computed<PaletteItem[]>(() =>
-  recordingsStore.list.map(r => ({
+  recordings.value.map(r => ({
     key: `rec:${r.name}`,
     group: 'Recordings',
     label: r.name,
@@ -244,7 +247,11 @@ const ensureRecordings = async () => {
   if (recordingsLoaded || recordingsLoading.value) return
   recordingsLoading.value = true
   try {
-    await recordingsStore.fetchList(0, 1000)
+    const res = (await listRecordings(
+      0,
+      MAX_PALETTE_RECORDINGS
+    )) as unknown as APIListResponse<APIRecording>
+    recordings.value = res.items || []
   } catch {
     // Best-effort — the palette still works with pages and paths.
   } finally {

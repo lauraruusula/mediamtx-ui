@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1>
-        RTSP Connections <el-tag size="small" round>{{ store.itemCount }}</el-tag>
+        RTSP Connections <el-tag size="small" round>{{ displayedCount }}</el-tag>
       </h1>
       <div v-if="!protocolDisabled" class="page-actions">
         <el-input
@@ -14,23 +14,43 @@
         />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
+          :active-text="'Auto refresh'"
           @change="autoRefreshCtrl.toggle"
         />
+        <el-select
+          :model-value="autoRefreshCtrl.interval.value"
+          class="interval-select"
+          aria-label="Auto refresh interval"
+          @change="autoRefreshCtrl.setIntervalMs"
+        >
+          <el-option
+            v-for="ms in AUTO_REFRESH_INTERVAL_OPTIONS_MS"
+            :key="ms"
+            :label="`${ms / 1000}s`"
+            :value="ms"
+          />
+        </el-select>
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Download" @click="exportCsvData">Export</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
     <p class="page-subtitle">
-      Raw TCP-level RTSP connections. Read-only — see RTSP Sessions to disconnect a client.
+      Raw TCP-level RTSP connections. Read-only — see
+      <router-link class="cell-link" to="/rtsp/sessions">RTSP Sessions</router-link> to disconnect a
+      client.
     </p>
-    <ProtocolDisabled v-if="protocolDisabled" protocol="RTSP" feature-label="connections" />
+    <ProtocolDisabled
+      v-if="protocolDisabled"
+      protocol="RTSP"
+      feature-label="connections"
+      tab-name="rtsp"
+    />
     <template v-else>
       <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
-      <el-card shadow="hover">
+      <el-card shadow="never">
         <el-table
-          v-loading="store.loading"
+          v-loading="initialLoading"
           :data="filteredList"
           style="width: 100%"
           :default-sort="sort.defaultSort"
@@ -58,7 +78,7 @@
           </el-table-column>
         </el-table>
         <el-empty
-          v-if="!store.loading && filteredList.length === 0"
+          v-if="!error && !initialLoading && filteredList.length === 0"
           :description="search ? `No connections match “${search}”` : 'No RTSP connections yet'"
         />
         <div v-if="!search && store.itemCount > 0" class="pagination-bar">
@@ -83,7 +103,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useRtspConnStore } from '@/stores/rtspConn'
 import { useProtocolGuard } from '@/composables/useProtocolGuard'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import {
+  useAutoRefresh,
+  AUTO_REFRESH_INTERVAL_MS,
+  AUTO_REFRESH_INTERVAL_OPTIONS_MS
+} from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
 import { useListError } from '@/composables/useListError'
@@ -94,8 +118,6 @@ import { Refresh, Search, Download } from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import ProtocolDisabled from '@/components/ProtocolDisabled.vue'
 import type { APIRTSPConn } from '@/types/api'
-
-const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = useRtspConnStore()
 // The server 404s /v3/rtspconns/* when RTSP is disabled, so we skip the fetch
@@ -108,11 +130,22 @@ const pagination = usePagination(
 )
 const lastUpdated = useLastUpdated()
 const search = ref('')
+// The loading mask is only meaningful while the table has nothing to render —
+// showing it on every auto-refresh tick makes the panel flash. Once the first
+// fetch lands, refreshes update rows in place and the refresh button's own
+// spinner covers the loading state.
+const initialLoading = ref(true)
 const { error, run } = useListError()
 const sort = useTableSort('sort:rtsp-connections')
 
 const filteredList = computed(() =>
   filterList(store.list, search.value, (c: APIRTSPConn) => c.id + ' ' + (c.remoteAddr || ''))
+)
+
+// While searching, the badge reflects what's on screen rather than the server
+// total (the list is fetched in full and filtered client-side).
+const displayedCount = computed(() =>
+  search.value.trim() ? filteredList.value.length : store.itemCount
 )
 
 const loadData = async () => {
@@ -123,6 +156,7 @@ const loadData = async () => {
     } else {
       await pagination.load()
     }
+    initialLoading.value = false
     lastUpdated.markUpdated()
   }, 'Failed to load RTSP connections')
 }

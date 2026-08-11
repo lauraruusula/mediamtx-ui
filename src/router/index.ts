@@ -68,6 +68,12 @@ const router = createRouter({
       name: 'config',
       component: () => import('@/views/Config.vue'),
       meta: { title: 'System Config' }
+    },
+    {
+      // Unknown URLs (typos, stale bookmarks) fall back to the dashboard
+      // instead of a blank page.
+      path: '/:pathMatch(.*)*',
+      redirect: '/'
     }
   ]
 })

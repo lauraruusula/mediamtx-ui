@@ -102,3 +102,13 @@ export function buildWhepUrl(pathName: string, port = DEFAULT_PORTS.webrtc): str
   const encodedPath = pathName.split('/').map(encodeURIComponent).join('/')
   return `http://${window.location.hostname}:${port}/${encodedPath}/whep`
 }
+
+// MediaMTX's built-in playback server defaults to port 9996 and can be moved
+// via `playbackAddress` in the global config. Reading the live address keeps
+// recording links pointing at the real server instead of a hard-coded port.
+const DEFAULT_PLAYBACK_PORT = 9996
+
+export function playbackPortFromConfig(config: Record<string, any>): number {
+  const port = portOf(config.playbackAddress)
+  return port ?? DEFAULT_PLAYBACK_PORT
+}

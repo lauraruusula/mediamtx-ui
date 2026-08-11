@@ -19,6 +19,12 @@ export function useWebRTCPlayer(
   const error = ref('')
 
   const RETRY_PAUSE = 2000
+  // Auto-reconnect is for transient failures (a dropped ICE connection, a
+  // momentarily dead network). Beyond this many consecutive failures the
+  // stream is assumed to be gone for good, so we stop hammering the server and
+  // surface a dead "Retry" state instead of an endless reconnect loop.
+  const MAX_AUTO_RETRIES = 5
+  let consecutiveFailures = 0
 
   let pc: RTCPeerConnection | null = null
   let sessionUrl: string | null = null
@@ -242,6 +248,14 @@ export function useWebRTCPlayer(
     queuedCandidates = []
 
     error.value = err
+    consecutiveFailures++
+    // The stream doesn't exist — no amount of retrying will bring it back.
+    const fatal = err === 'stream not found' || consecutiveFailures >= MAX_AUTO_RETRIES
+    if (fatal) {
+      setState('error')
+      options.onError?.(err)
+      return
+    }
     setState('reconnecting')
     options.onError?.(`${err}, reconnecting...`)
 
@@ -285,6 +299,7 @@ export function useWebRTCPlayer(
         videoRef.value.srcObject = evt.streams[0]
         videoRef.value.play().catch(() => {})
         error.value = ''
+        consecutiveFailures = 0
         setState('connected')
       }
     }
@@ -386,6 +401,9 @@ export function useWebRTCPlayer(
     closed = false
     currentUrl = url
     error.value = ''
+    // A manual (re)connect is a fresh attempt — the retry budget resets so the
+    // user can always try again after a fatal error.
+    consecutiveFailures = 0
     setState('connecting')
     try {
       await getNonAdvertisedCodecs()

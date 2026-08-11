@@ -18,18 +18,6 @@
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;
   --el-border-radius-round: 999px;
-
-  /* Stat-card icon badges: coordinated, not clashing */
-  --stat-badge-1: linear-gradient(135deg, #4a63ee 0%, #6d8bff 100%);
-  --stat-badge-2: linear-gradient(135deg, #8b5cf6 0%, #b18af9 100%);
-  --stat-badge-3: linear-gradient(135deg, #12b76a 0%, #3fd68f 100%);
-  --stat-badge-4: linear-gradient(135deg, #f79009 0%, #fdb022 100%);
-  --stat-badge-5: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
-  --stat-accent-1: #4a63ee;
-  --stat-accent-2: #8b5cf6;
-  --stat-accent-3: #12b76a;
-  --stat-accent-4: #f79009;
-  --stat-accent-5: #0ea5e9;
 }
 
 :root,
@@ -257,119 +245,6 @@ body {
   display: flex;
 }
 
-.sidebar-container {
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
-  transition:
-    width 0.3s ease,
-    background-color 0.3s,
-    transform 0.3s ease;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  z-index: 100;
-}
-
-.sidebar-logo {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 12px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--sidebar-border);
-}
-
-.logo-badge {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #4a63ee 0%, #8b5cf6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  flex-shrink: 0;
-  box-shadow: 0 4px 10px rgba(74, 99, 238, 0.35);
-}
-
-.logo-text-group {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  line-height: 1.25;
-}
-
-.logo-text-group .logo-text {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--el-text-color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: -0.01em;
-}
-
-.logo-text-group .logo-subtext {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-
-.sidebar-menu {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  border-right: none !important;
-  padding: 10px 0 12px;
-}
-
-.sidebar-menu .el-menu-item,
-.sidebar-menu .el-sub-menu__title {
-  margin: 2px 10px;
-  border-radius: var(--radius-md);
-  height: 40px;
-  line-height: 40px;
-  font-size: 13.5px;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.sidebar-menu .el-menu-item:hover,
-.sidebar-menu .el-sub-menu__title:hover {
-  background-color: var(--sidebar-hover-bg) !important;
-}
-
-.sidebar-menu .el-sub-menu__title {
-  font-weight: 500;
-}
-
-.sidebar-menu .el-menu-item.is-active {
-  background-color: var(--sidebar-active-bg);
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.sidebar-menu .el-menu-item.is-active .el-icon {
-  color: var(--el-color-primary);
-}
-
-.sidebar-menu .el-menu-item .el-icon,
-.sidebar-menu .el-sub-menu__title .el-icon {
-  font-size: 16px;
-  margin-right: 10px;
-}
-
-.sidebar-menu .el-menu {
-  background-color: transparent;
-}
-
 /* Main container */
 .main-container {
   flex: 1;
@@ -383,7 +258,7 @@ body {
   height: 64px;
   display: flex;
   align-items: center;
-  padding: 0 24px;
+  padding: 0 20px;
   background: var(--header-bg);
   backdrop-filter: saturate(180%) blur(10px);
   -webkit-backdrop-filter: saturate(180%) blur(10px);
@@ -397,21 +272,15 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
-}
-
-.header-title {
-  font-size: 16.5px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  letter-spacing: -0.01em;
+  gap: 20px;
+  min-width: 0;
 }
 
 .header-right {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .icon-btn {
@@ -441,8 +310,7 @@ body {
   transform: scale(0.94);
 }
 
-.icon-btn:focus-visible,
-.sidebar-footer-link:focus-visible {
+.icon-btn:focus-visible {
   outline: 2px solid var(--el-color-primary);
   outline-offset: 2px;
 }
@@ -468,6 +336,14 @@ body {
   box-shadow: 0 0 0 3px rgba(18, 183, 106, 0.16);
   flex-shrink: 0;
   animation: pulse-dot 2.4s ease-in-out infinite;
+}
+
+/* Dropdown menus are teleported to <body>, so nav item active states must be
+   styled globally rather than scoped to App.vue. */
+.el-dropdown-menu__item.active {
+  background-color: var(--sidebar-active-bg);
+  color: var(--el-color-primary);
+  font-weight: 600;
 }
 
 .server-pill .status-dot.offline {
@@ -502,14 +378,14 @@ body {
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
+  align-items: flex-end;
   flex-wrap: wrap;
   gap: 12px;
+  margin-bottom: 14px;
 }
 
 .page-header h1 {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0;
@@ -518,10 +394,21 @@ body {
   gap: 10px;
 }
 
+.page-header h1 .el-tag {
+  margin-top: 3px;
+}
+
 .page-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Compact cadence picker next to the auto-refresh switch on list pages */
+.interval-select {
+  width: 78px;
+  flex-shrink: 0;
 }
 
 .updated-hint {
@@ -561,74 +448,6 @@ body {
 
 .el-card__body {
   padding: 22px;
-}
-
-/* Stat card grid — auto-fits any card count (4, 5, ...) without the awkward
-   el-col math that a fixed column-span grid would need. */
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-/* Stat cards */
-.stat-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-}
-
-.stat-card:hover {
-  box-shadow: var(--card-shadow-hover);
-  transform: translateY(-3px);
-}
-
-.stat-card .el-card__body {
-  padding: 20px 22px;
-}
-
-.stat-card-accent {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-}
-
-.stat-card-inner {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.stat-card-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 21px;
-  color: #fff;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-}
-
-.stat-card-info .stat-value {
-  font-size: 27px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: var(--el-text-color-primary);
-}
-
-.stat-card-info .stat-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--el-text-color-secondary);
-  margin-top: 3px;
 }
 
 /* ==========================================================================
@@ -712,6 +531,11 @@ body {
   border-radius: var(--radius-sm);
   font-weight: 600;
   border: none;
+  white-space: nowrap;
+}
+
+.el-table .el-tag {
+  vertical-align: middle;
 }
 
 .el-tag--round {
@@ -751,32 +575,97 @@ body {
   box-shadow: var(--shadow-md) !important;
 }
 
-.el-tabs--border-card {
+.el-alert {
+  --el-alert-padding: 14px 18px;
   border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: none;
-  border-color: var(--el-border-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow: var(--card-shadow);
 }
 
-.el-tabs--border-card > .el-tabs__header {
-  background-color: var(--el-fill-color-light);
-  border-bottom-color: var(--el-border-color-lighter);
+.el-alert .el-alert__title {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.el-alert .el-alert__description {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.el-alert.el-alert--error {
+  --el-alert-bg-color: var(--el-color-danger-light-9);
+  border-color: var(--el-color-danger-light-7);
+}
+
+.el-alert.el-alert--success {
+  --el-alert-bg-color: var(--el-color-success-light-9);
+  border-color: var(--el-color-success-light-7);
+}
+
+.el-alert.el-alert--warning {
+  --el-alert-bg-color: var(--el-color-warning-light-9);
+  border-color: var(--el-color-warning-light-7);
+}
+
+.el-alert.el-alert--info {
+  --el-alert-bg-color: var(--el-color-info-light-9);
+  border-color: var(--el-color-info-light-7);
+}
+
+/* Modern toasts — bottom-right notifications with a card look and a tinted
+   icon chip. `customClass: 'app-toast'` is set centrally in useToast.ts. */
+.el-message.app-toast {
+  --el-message-bg-color: var(--el-bg-color-overlay);
+  min-width: 280px;
+  max-width: 440px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow: var(--shadow-lg);
+  gap: 12px;
+}
+
+.el-message.app-toast .el-message__content {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--el-text-color-primary);
+}
+
+.el-message.app-toast .el-message__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.el-message.app-toast.el-message--success .el-message__icon {
+  background: var(--el-color-success-light-8);
+  color: var(--el-color-success);
+}
+
+.el-message.app-toast.el-message--error .el-message__icon {
+  background: var(--el-color-danger-light-8);
+  color: var(--el-color-danger);
+}
+
+.el-message.app-toast.el-message--warning .el-message__icon {
+  background: var(--el-color-warning-light-8);
+  color: var(--el-color-warning);
+}
+
+.el-message.app-toast.el-message--info .el-message__icon {
+  background: var(--el-color-info-light-8);
+  color: var(--el-color-info);
 }
 
 .el-empty__description p {
   color: var(--el-text-color-secondary);
-}
-
-/* Mobile sidebar overlay */
-.sidebar-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(10, 12, 18, 0.5);
-  backdrop-filter: blur(2px);
-  z-index: 99;
 }
 
 /* ==========================================================================
@@ -784,18 +673,6 @@ body {
    ========================================================================== */
 
 @media (max-width: 768px) {
-  .sidebar-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    z-index: 100;
-  }
-
-  .sidebar-container.collapsed {
-    transform: translateX(-100%);
-  }
-
   .app-main {
     padding: 16px 14px 28px;
   }
@@ -805,7 +682,7 @@ body {
   }
 
   .page-header h1 {
-    font-size: 19px;
+    font-size: 20px;
   }
 }
 
@@ -823,6 +700,16 @@ body {
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+/* Drawer slide-in transition */
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.drawer-enter-from,
+.drawer-leave-to {
+  transform: translateX(-100%);
 }
 
 .form-hint {
@@ -851,6 +738,71 @@ body {
   margin-top: 18px;
 }
 
+.el-pagination {
+  --el-pagination-button-border-radius: var(--radius-sm);
+  --el-pagination-button-color: var(--el-text-color-regular);
+  --el-pagination-button-bg-color: var(--el-fill-color-light);
+  --el-pagination-button-disabled-color: var(--el-text-color-placeholder);
+  --el-pagination-text-color: var(--el-text-color-secondary);
+  --el-pagination-hover-color: var(--el-color-primary);
+  font-weight: 500;
+}
+
+.el-pagination.is-background .el-pager li {
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  min-width: 30px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.el-pagination.is-background .el-pager li:not(.is-active):hover {
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary-light-7);
+}
+
+.el-pagination.is-background .el-pager li.is-active {
+  background-color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(74, 99, 238, 0.2);
+}
+
+.el-pagination .btn-prev,
+.el-pagination .btn-next {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--el-border-color-lighter);
+  background-color: var(--el-fill-color-light);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.el-pagination .btn-prev:not(:disabled):hover,
+.el-pagination .btn-next:not(:disabled):hover {
+  background-color: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-7);
+  color: var(--el-color-primary);
+}
+
+.el-pagination .el-pagination__sizes .el-input__wrapper {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px var(--el-border-color-lighter) inset;
+}
+
+.el-pagination .el-pagination__sizes .el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
+}
+
+.el-pagination .el-pagination__total,
+.el-pagination .el-pagination__jump {
+  font-size: 12.5px;
+}
+
 /* Small pulsing dot prefixed inside "Online"/live status tags, echoing the
    header's server-status dot so the same visual language means "live" everywhere. */
 .tag-live-dot {
@@ -862,44 +814,6 @@ body {
   background: currentColor;
   vertical-align: middle;
   animation: pulse-dot 2.4s ease-in-out infinite;
-}
-
-/* Small icon chip used in chart card headers, echoing the stat-card-icon language. */
-.chart-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.chart-card-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.chart-card-title {
-  font-weight: 600;
-}
-
-.chart-card-hint {
-  font-size: 11.5px;
-  font-weight: 400;
-  color: var(--el-text-color-secondary);
-}
-
-.bandwidth-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
 }
 
 /* Header activity bell + popover */

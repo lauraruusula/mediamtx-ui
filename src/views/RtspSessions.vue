@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1>
-        RTSP Sessions <el-tag size="small" round>{{ store.itemCount }}</el-tag>
+        RTSP Sessions <el-tag size="small" round>{{ displayedCount }}</el-tag>
       </h1>
       <div v-if="!protocolDisabled" class="page-actions">
         <el-input
@@ -23,9 +23,22 @@
         </el-button>
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
+          :active-text="'Auto refresh'"
           @change="autoRefreshCtrl.toggle"
         />
+        <el-select
+          :model-value="autoRefreshCtrl.interval.value"
+          class="interval-select"
+          aria-label="Auto refresh interval"
+          @change="autoRefreshCtrl.setIntervalMs"
+        >
+          <el-option
+            v-for="ms in AUTO_REFRESH_INTERVAL_OPTIONS_MS"
+            :key="ms"
+            :label="`${ms / 1000}s`"
+            :value="ms"
+          />
+        </el-select>
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Download" @click="exportCsvData">Export</el-button>
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
@@ -34,22 +47,28 @@
     <p class="page-subtitle">
       Logical RTSP publish/read sessions, one per client. Kick a session to disconnect its client.
     </p>
-    <ProtocolDisabled v-if="protocolDisabled" protocol="RTSP" feature-label="sessions" />
+    <ProtocolDisabled
+      v-if="protocolDisabled"
+      protocol="RTSP"
+      feature-label="sessions"
+      tab-name="rtsp"
+    />
     <template v-else>
       <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
-      <el-card shadow="hover">
+      <el-card shadow="never">
         <el-table
           ref="tableRef"
-          v-loading="store.loading"
+          v-loading="initialLoading"
           :data="filteredList"
           style="width: 100%"
           :default-sort="sort.defaultSort"
+          row-key="id"
           @sort-change="sort.onSortChange"
           @selection-change="bulk.onSelectionChange"
         >
-          <el-table-column type="selection" width="42" />
+          <el-table-column type="selection" width="42" reserve-selection />
           <el-table-column prop="id" label="ID" width="280" show-overflow-tooltip />
-          <el-table-column label="Status" width="80">
+          <el-table-column label="Status" width="110">
             <template #default="{ row }">
               <el-tag
                 :type="
@@ -95,7 +114,7 @@
           </el-table-column>
         </el-table>
         <el-empty
-          v-if="!store.loading && filteredList.length === 0"
+          v-if="!error && !initialLoading && filteredList.length === 0"
           :description="search ? `No sessions match “${search}”` : 'No RTSP sessions yet'"
         />
         <div v-if="!search && store.itemCount > 0" class="pagination-bar">
@@ -121,7 +140,11 @@ import { useRtspSessionStore } from '@/stores/rtspSession'
 import { useActivityStore } from '@/stores/activity'
 import { useProtocolGuard } from '@/composables/useProtocolGuard'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import {
+  useAutoRefresh,
+  AUTO_REFRESH_INTERVAL_MS,
+  AUTO_REFRESH_INTERVAL_OPTIONS_MS
+} from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
 import { useListError } from '@/composables/useListError'
@@ -129,15 +152,13 @@ import { useTableSort } from '@/composables/useTableSort'
 import { useBulkKick, type KickableTable } from '@/composables/useBulkKick'
 import { exportCsv } from '@/composables/useCsvExport'
 import { formatBytes, formatState } from '@/composables/useFormatters'
-import { ElMessage } from 'element-plus'
 import { Refresh, Search, SwitchButton, Download } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
+import { toast } from '@/composables/useToast'
 import PathLink from '@/components/PathLink.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import ProtocolDisabled from '@/components/ProtocolDisabled.vue'
 import type { APIRTSPSession } from '@/types/api'
-
-const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 
 const store = useRtspSessionStore()
 const activityStore = useActivityStore()
@@ -151,6 +172,11 @@ const pagination = usePagination(
 )
 const lastUpdated = useLastUpdated()
 const search = ref('')
+// The loading mask is only meaningful while the table has nothing to render —
+// showing it on every auto-refresh tick makes the panel flash. Once the first
+// fetch lands, refreshes update rows in place and the refresh button's own
+// spinner covers the loading state.
+const initialLoading = ref(true)
 const { error, run } = useListError()
 const sort = useTableSort('sort:rtsp-sessions')
 const tableRef = ref<KickableTable | null>(null)
@@ -164,6 +190,12 @@ const filteredList = computed(() =>
   )
 )
 
+// While searching, the badge reflects what's on screen rather than the server
+// total (the list is fetched in full and filtered client-side).
+const displayedCount = computed(() =>
+  search.value.trim() ? filteredList.value.length : store.itemCount
+)
+
 const loadData = async () => {
   if (!(await guard())) return
   await run(async () => {
@@ -172,6 +204,7 @@ const loadData = async () => {
     } else {
       await pagination.load()
     }
+    initialLoading.value = false
     lastUpdated.markUpdated()
   }, 'Failed to load RTSP sessions')
 }
@@ -181,10 +214,10 @@ useSearchableList(search, () => loadData())
 const handleKick = async (id: string) => {
   try {
     await store.kick(id)
-    ElMessage.success('Session kicked')
+    toast.success('Session kicked')
     activityStore.log(`Kicked an RTSP session (${id.slice(0, 8)}…)`, 'error')
   } catch (err) {
-    ElMessage.error(getErrorMessage(err, 'Failed to kick session'))
+    toast.error(getErrorMessage(err, 'Failed to kick session'))
   }
 }
 

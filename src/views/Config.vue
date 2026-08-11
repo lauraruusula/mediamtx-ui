@@ -14,14 +14,22 @@
       Server-wide MediaMTX configuration. Changes apply immediately to the live server.
     </p>
 
-    <el-card shadow="hover">
-      <el-tabs v-model="activeTab" type="border-card">
+    <el-card shadow="never" class="config-card">
+      <el-tabs v-model="activeTab" :tab-position="tabPosition" class="config-tabs">
         <!-- General config -->
-        <el-tab-pane label="General" name="general">
-          <p class="tab-summary">
-            Logging and low-level network timeouts that apply server-wide across all protocols.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="general">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Setting /></el-icon>General</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>General</h2>
+            <p>
+              Logging and low-level network timeouts that apply server-wide across all protocols.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Log Level">
               <el-select v-model="configStore.config.logLevel" style="width: 100%">
                 <el-option label="DEBUG" value="debug" />
@@ -57,12 +65,20 @@
         </el-tab-pane>
 
         <!-- Auth config -->
-        <el-tab-pane label="Auth" name="auth">
-          <p class="tab-summary">
-            How MediaMTX authenticates publishers and readers: internal credentials, an external
-            HTTP server, or JSON Web Tokens (JWT).
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="auth">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Lock /></el-icon>Auth</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>Auth</h2>
+            <p>
+              How MediaMTX authenticates publishers and readers: internal credentials, an external
+              HTTP server, or JSON Web Tokens (JWT).
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Auth Method">
               <el-select v-model="configStore.config.authMethod" style="width: 100%">
                 <el-option label="Internal" value="internal" />
@@ -86,11 +102,19 @@
         </el-tab-pane>
 
         <!-- RTSP config -->
-        <el-tab-pane label="RTSP" name="rtsp">
-          <p class="tab-summary">
-            RTSP/RTSPS listener settings and whether transport encryption is offered or enforced.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="rtsp">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Monitor /></el-icon>RTSP</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>RTSP</h2>
+            <p>
+              RTSP/RTSPS listener settings and whether transport encryption is offered or enforced.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable RTSP">
               <el-switch v-model="configStore.config.rtsp" />
             </el-form-item>
@@ -111,11 +135,19 @@
         </el-tab-pane>
 
         <!-- RTMP config -->
-        <el-tab-pane label="RTMP" name="rtmp">
-          <p class="tab-summary">
-            RTMP/RTMPS listener settings and whether transport encryption is offered or enforced.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="rtmp">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Film /></el-icon>RTMP</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>RTMP</h2>
+            <p>
+              RTMP/RTMPS listener settings and whether transport encryption is offered or enforced.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable RTMP">
               <el-switch v-model="configStore.config.rtmp" />
             </el-form-item>
@@ -136,12 +168,20 @@
         </el-tab-pane>
 
         <!-- HLS config -->
-        <el-tab-pane label="HLS" name="hls">
-          <p class="tab-summary">
-            HTTP Live Streaming listener, output variant (MPEG-TS, fMP4, or Low Latency), and how
-            the stream is split into segments.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="hls">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Files /></el-icon>HLS</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>HLS</h2>
+            <p>
+              HTTP Live Streaming listener, output variant (MPEG-TS, fMP4, or Low Latency), and how
+              the stream is split into segments.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable HLS">
               <el-switch v-model="configStore.config.hls" />
             </el-form-item>
@@ -169,12 +209,20 @@
         </el-tab-pane>
 
         <!-- WebRTC config -->
-        <el-tab-pane label="WebRTC" name="webrtc">
-          <p class="tab-summary">
-            WebRTC (WHEP/WHIP) listener plus STUN/TURN servers and NAT traversal settings for
-            browser-based viewers.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="webrtc">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><VideoCamera /></el-icon>WebRTC</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>WebRTC</h2>
+            <p>
+              WebRTC (WHEP/WHIP) listener plus STUN/TURN servers and NAT traversal settings for
+              browser-based viewers.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable WebRTC">
               <el-switch v-model="configStore.config.webrtc" />
             </el-form-item>
@@ -204,12 +252,20 @@
         </el-tab-pane>
 
         <!-- SRT config -->
-        <el-tab-pane label="SRT" name="srt">
-          <p class="tab-summary">
-            SRT listener for secure, low-latency transport — commonly used to carry streams between
-            servers.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="srt">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Promotion /></el-icon>SRT</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>SRT</h2>
+            <p>
+              SRT listener for secure, low-latency transport — commonly used to carry streams
+              between servers.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable SRT">
               <el-switch v-model="configStore.config.srt" />
             </el-form-item>
@@ -220,12 +276,20 @@
         </el-tab-pane>
 
         <!-- API config -->
-        <el-tab-pane label="API" name="api">
-          <p class="tab-summary">
-            REST API listener that this dashboard uses to read and modify the server, plus optional
-            HTTPS.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="api">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Link /></el-icon>API</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>API</h2>
+            <p>
+              REST API listener that this dashboard uses to read and modify the server, plus
+              optional HTTPS.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable API">
               <el-switch v-model="configStore.config.api" />
             </el-form-item>
@@ -239,11 +303,19 @@
         </el-tab-pane>
 
         <!-- Recording config -->
-        <el-tab-pane label="Recording" name="record">
-          <p class="tab-summary">
-            Server-wide recording defaults. Individual paths can override these in Path Config.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="record">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><FolderOpened /></el-icon>Recording</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>Recording</h2>
+            <p>
+              Server-wide recording defaults. Individual paths can override these in Path Config.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable Recording">
               <el-switch v-model="configStore.config.record" />
             </el-form-item>
@@ -260,12 +332,20 @@
         </el-tab-pane>
 
         <!-- Playback config -->
-        <el-tab-pane label="Playback" name="playback">
-          <p class="tab-summary">
-            Built-in playback server that serves recordings over HLS/WebRTC, and how it
-            authenticates requests.
-          </p>
-          <el-form :model="configStore.config" label-width="180px">
+        <el-tab-pane lazy name="playback">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><VideoPlay /></el-icon>Playback</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>Playback</h2>
+            <p>
+              Built-in playback server that serves recordings over HLS/WebRTC, and how it
+              authenticates requests.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
             <el-form-item label="Enable Playback">
               <el-switch v-model="configStore.config.playback" />
             </el-form-item>
@@ -289,18 +369,57 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
 import { useActivityStore } from '@/stores/activity'
 import { refreshJwks } from '@/api/auth'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { ElMessageBox } from 'element-plus'
+import {
+  Refresh,
+  Setting,
+  Lock,
+  Monitor,
+  Film,
+  Files,
+  VideoCamera,
+  Promotion,
+  Link,
+  FolderOpened,
+  VideoPlay
+} from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
+import { toast } from '@/composables/useToast'
 
 const configStore = useConfigStore()
 const activityStore = useActivityStore()
+const route = useRoute()
 const activeTab = ref('general')
 const jwksRefreshing = ref(false)
+
+const validTabs = [
+  'general',
+  'auth',
+  'rtsp',
+  'rtmp',
+  'hls',
+  'webrtc',
+  'srt',
+  'api',
+  'record',
+  'playback'
+]
+
+// Tabs sit in a left rail on wide screens and move to a horizontal bar on
+// narrow ones (where a 10-item vertical rail would push the form off-screen).
+// The form label width shrinks along with it so fields keep a usable width.
+const tabPosition = ref<'left' | 'top'>('left')
+const formLabelWidth = ref('180px')
+
+const checkTabPosition = () => {
+  const narrow = window.innerWidth < 768
+  tabPosition.value = narrow ? 'top' : 'left'
+  formLabelWidth.value = narrow ? '120px' : '180px'
+}
 
 // webrtcICEServers is an array in the API config; the form edits it as a
 // newline-separated list.
@@ -351,9 +470,9 @@ const refreshConfig = async () => {
   try {
     await configStore.fetchConfig()
     markClean()
-    ElMessage.success('Config refreshed')
+    toast.success('Config refreshed')
   } catch (err) {
-    ElMessage.error(getErrorMessage(err, 'Failed to refresh config'))
+    toast.error(getErrorMessage(err, 'Failed to refresh config'))
   }
 }
 
@@ -361,8 +480,8 @@ const confirmSave = async () => {
   try {
     await ElMessageBox.confirm(
       'This applies your changes to the live MediaMTX server configuration immediately.',
-      'Apply config changes?',
-      { confirmButtonText: 'Apply', cancelButtonText: 'Cancel', type: 'warning' }
+      'Save config changes?',
+      { confirmButtonText: 'Save', cancelButtonText: 'Cancel', type: 'warning' }
     )
   } catch {
     return // cancelled
@@ -371,20 +490,23 @@ const confirmSave = async () => {
 }
 
 const saveConfig = async () => {
-  // MediaMTX rejects some empty-string fields outright (same as path config),
-  // so omit blanks rather than sending them verbatim.
+  // MediaMTX copies every PATCHed field verbatim, so an empty string is what
+  // clears a field back to its default. Stripping blanks here made it
+  // impossible to reset a field once set. Validation still guards the few
+  // fields that can't be empty while their feature is enabled (e.g. an
+  // address while the protocol is on) and surfaces a clear error.
   const data: Record<string, any> = {}
   for (const [key, value] of Object.entries(configStore.config)) {
-    if (value === '' || value === null || value === undefined) continue
+    if (value === null || value === undefined) continue
     data[key] = value
   }
   try {
     await configStore.saveConfig(data)
     markClean()
-    ElMessage.success('Config saved')
-    activityStore.log('Applied system config changes', 'success')
+    toast.success('Config saved')
+    activityStore.log('Saved system config changes', 'success')
   } catch (err) {
-    ElMessage.error(getErrorMessage(err, 'Failed to save config'))
+    toast.error(getErrorMessage(err, 'Failed to save config'))
   }
 }
 
@@ -392,10 +514,10 @@ const handleRefreshJwks = async () => {
   jwksRefreshing.value = true
   try {
     await refreshJwks()
-    ElMessage.success('JWKS refreshed')
+    toast.success('JWKS refreshed')
     activityStore.log('Refreshed JWT JWKS', 'success')
   } catch (err) {
-    ElMessage.error(getErrorMessage(err, 'Failed to refresh JWKS'))
+    toast.error(getErrorMessage(err, 'Failed to refresh JWKS'))
   } finally {
     jwksRefreshing.value = false
   }
@@ -410,33 +532,160 @@ const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
 
 onBeforeRouteLeave(() => {
   if (!isDirty.value) return true
-  return window.confirm('You have unsaved config changes. Leave without saving?')
+  // vue-router awaits the returned promise; resolve true to proceed, false to
+  // stay. ElMessageBox rejects when dismissed, which maps to "stay".
+  return ElMessageBox.confirm(
+    'You have unsaved config changes. Leave without saving?',
+    'Unsaved changes',
+    { confirmButtonText: 'Leave', cancelButtonText: 'Keep editing', type: 'warning' }
+  )
+    .then(() => true)
+    .catch(() => false)
 })
 
+// Allow deep-linking to a specific tab (e.g. /config?tab=rtmp from a
+// ProtocolDisabled hint) and switching tabs via the URL.
+watch(
+  () => route.query.tab,
+  tab => {
+    if (typeof tab === 'string' && validTabs.includes(tab)) activeTab.value = tab
+  }
+)
+
 onMounted(() => {
+  checkTabPosition()
+  if (typeof route.query.tab === 'string' && validTabs.includes(route.query.tab)) {
+    activeTab.value = route.query.tab
+  }
   refreshConfig()
+  window.addEventListener('resize', checkTabPosition)
   window.addEventListener('beforeunload', beforeUnloadHandler)
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', checkTabPosition)
   window.removeEventListener('beforeunload', beforeUnloadHandler)
 })
 </script>
 
 <style scoped>
-:deep(.el-tabs__content) {
-  padding: 20px;
+.config-card {
+  overflow: hidden;
 }
 
-.tab-summary {
-  margin: 0 0 16px;
+/* Left-rail settings layout for the config tabs (wide screens) */
+/* `--el-tabs-header-height: auto` must only apply to the rail layout — if it
+   leaks into the top-position (mobile) chrome, default tab items collapse to
+   content height. */
+.config-tabs.el-tabs--left {
+  --el-tabs-header-height: auto;
+}
+
+/* Only apply the rail look when tabs actually sit on the left; when they
+   collapse to a horizontal bar on narrow screens, fall back to EP's default
+   top-position chrome. */
+.config-tabs.el-tabs--left :deep(.el-tabs__header) {
+  background: var(--el-fill-color-light);
+  border-right: 1px solid var(--el-border-color-lighter);
+  margin-right: 0;
+  width: 220px;
+  padding: 16px 12px;
+  flex-shrink: 0;
+}
+
+.config-tabs.el-tabs--left :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.config-tabs.el-tabs--left :deep(.el-tabs__active-bar) {
+  display: none;
+}
+
+.config-tabs.el-tabs--left :deep(.el-tabs__item) {
+  height: auto;
+  line-height: 1.3;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+  color: var(--el-text-color-regular);
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.config-tabs.el-tabs--left :deep(.el-tabs__item:hover) {
+  background: var(--surface-hover);
+  color: var(--el-text-color-primary);
+}
+
+.config-tabs.el-tabs--left :deep(.el-tabs__item.is-active) {
+  background: var(--sidebar-active-bg);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.config-tabs :deep(.el-tabs__content) {
+  overflow: hidden;
+  padding: 28px 32px;
+}
+
+.tab-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tab-label .el-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+/* Section heading inside each tab pane */
+.tab-heading {
+  margin-bottom: 20px;
+}
+
+.tab-heading h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--el-text-color-primary);
+}
+
+.tab-heading p {
+  margin: 0;
+  max-width: 680px;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--el-text-color-secondary);
-  max-width: 680px;
+}
+
+/* Constrain forms so inputs don't stretch the full panel width */
+.config-form {
+  max-width: 640px;
 }
 
 .page-header h1 {
   gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .config-tabs :deep(.el-tabs__content) {
+    padding: 20px 16px;
+  }
+
+  /* Mobile horizontal tabs: keep items compact so the scrollable strip reads
+     well; the icon sits inline with the label, EP's default 40px row height
+     applies now that --el-tabs-header-height stays untouched here. */
+  .config-tabs :deep(.el-tabs__item) {
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .config-form {
+    max-width: 100%;
+  }
 }
 </style>

@@ -17,8 +17,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Link, DocumentCopy } from '@element-plus/icons-vue'
+import { toast } from '@/composables/useToast'
 import { useConfigStore } from '@/stores/config'
 import {
   buildStreamUrls,
@@ -60,9 +60,9 @@ const urls = computed(() =>
 async function handleCopy(u: StreamUrl) {
   const ok = await copyToClipboard(u.url)
   if (ok) {
-    ElMessage.success(`Copied ${u.label} URL to clipboard`)
+    toast.success(`Copied ${u.label} URL to clipboard`)
   } else {
-    ElMessage.error('Could not copy to clipboard')
+    toast.error('Could not copy to clipboard')
   }
 }
 </script>

@@ -36,7 +36,11 @@ export function useTableSort(storageKey: string) {
     if (data.prop && data.order) {
       defaultSort.value = { prop: data.prop, order: data.order }
       localStorage.setItem(storageKey, JSON.stringify(defaultSort.value))
-    } else {
+    } else if (!data.prop && !data.order) {
+      // The user explicitly cleared the sort (third click on the header) —
+      // drop the stored sort. Columns without a `prop` (custom sort-method)
+      // only emit an order without a prop, so they sort in-session but must
+      // not wipe (or overwrite) the persisted sort.
       defaultSort.value = { prop: '', order: 'ascending' }
       localStorage.removeItem(storageKey)
     }

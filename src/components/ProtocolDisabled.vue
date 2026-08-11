@@ -1,5 +1,5 @@
 <template>
-  <el-card shadow="hover" class="protocol-disabled">
+  <el-card shadow="never" class="protocol-disabled">
     <div class="protocol-disabled-content">
       <el-icon class="protocol-disabled-icon"><Connection /></el-icon>
       <h2 class="protocol-disabled-title">{{ protocol }} is disabled</h2>
@@ -17,20 +17,24 @@
 import { useRouter } from 'vue-router'
 import { Connection, Setting } from '@element-plus/icons-vue'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     protocol: string
     featureLabel?: string
+    tabName?: string
   }>(),
   {
-    featureLabel: 'activity'
+    featureLabel: 'activity',
+    tabName: ''
   }
 )
 
 const router = useRouter()
 
 const openConfig = () => {
-  router.push('/config')
+  // Deep-link straight to the protocol's tab in System Config so the user
+  // doesn't have to hunt for the right switch.
+  router.push({ path: '/config', query: props.tabName ? { tab: props.tabName } : {} })
 }
 </script>
 

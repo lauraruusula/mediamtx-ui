@@ -1,5 +1,6 @@
 import { ref, reactive, type Ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { useActivityStore } from '@/stores/activity'
 
 interface Kickable {
@@ -9,6 +10,8 @@ interface Kickable {
 export interface KickableTable {
   clearSelection: () => void
 }
+
+const plural = (label: string, count: number) => (count === 1 ? label : `${label}s`)
 
 /**
  * Multi-select kick support for connection/session tables. Bind
@@ -28,6 +31,17 @@ export function useBulkKick(store: { kick: (id: string) => Promise<void> }, labe
   const kickSelected = async (table?: Ref<KickableTable | null>) => {
     const rows = [...selection.value]
     if (!rows.length) return
+    // Kicking several clients at once is destructive — confirm first so a
+    // mis-click on the danger button can't take out a whole fleet.
+    try {
+      await ElMessageBox.confirm(
+        `Kick ${rows.length} ${plural(label, rows.length)}? The clients will be disconnected immediately.`,
+        `Kick ${rows.length} ${plural(label, rows.length)}?`,
+        { confirmButtonText: 'Kick', cancelButtonText: 'Cancel', type: 'warning' }
+      )
+    } catch {
+      return // cancelled
+    }
     kicking.value = true
     try {
       // Fire all kicks at once — waiting for them in sequence makes large
@@ -36,11 +50,11 @@ export function useBulkKick(store: { kick: (id: string) => Promise<void> }, labe
       const succeeded = results.filter(r => r.status === 'fulfilled').length
       const failed = rows.length - succeeded
       if (succeeded > 0) {
-        ElMessage.success(`Kicked ${succeeded} ${label}${succeeded > 1 ? 's' : ''}`)
-        activityStore.log(`Kicked ${succeeded} ${label}${succeeded > 1 ? 's' : ''}`, 'error')
+        toast.success(`Kicked ${succeeded} ${plural(label, succeeded)}`)
+        activityStore.log(`Kicked ${succeeded} ${plural(label, succeeded)}`, 'error')
       }
       if (failed > 0) {
-        ElMessage.error(`Failed to kick ${failed} of ${rows.length} ${label}s`)
+        toast.error(`Failed to kick ${failed} of ${rows.length} ${plural(label, failed)}`)
       }
       selection.value = []
       table?.value?.clearSelection()

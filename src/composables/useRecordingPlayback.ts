@@ -16,6 +16,7 @@ export function buildPlaybackUrl(
   pathName: string,
   segments: APIRecordingSegment[],
   index: number,
+  port = DEFAULT_PLAYBACK_PORT,
   fallbackDurationSeconds = 3600
 ): string {
   const segment = segments[index]
@@ -37,5 +38,5 @@ export function buildPlaybackUrl(
   // MediaMTX's playback server is plain HTTP (no TLS support), so the scheme
   // must not be inherited from the admin UI's own protocol — an HTTPS-served UI
   // would otherwise generate https:// links to an http-only server.
-  return `http://${window.location.hostname}:${DEFAULT_PLAYBACK_PORT}/get?${params.toString()}`
+  return `http://${window.location.hostname}:${port}/get?${params.toString()}`
 }

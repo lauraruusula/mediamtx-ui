@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1>
-        Recordings <el-tag size="small" round>{{ store.itemCount }}</el-tag>
+        Recordings <el-tag size="small" round>{{ displayedCount }}</el-tag>
       </h1>
       <div class="page-actions">
         <el-input
@@ -14,27 +14,48 @@
         />
         <el-switch
           v-model="autoRefreshCtrl.active.value"
-          :active-text="`Auto refresh (${AUTO_REFRESH_INTERVAL_S}s)`"
+          :active-text="'Auto refresh'"
           @change="autoRefreshCtrl.toggle"
         />
+        <el-select
+          :model-value="autoRefreshCtrl.interval.value"
+          class="interval-select"
+          aria-label="Auto refresh interval"
+          @change="autoRefreshCtrl.setIntervalMs"
+        >
+          <el-option
+            v-for="ms in AUTO_REFRESH_INTERVAL_OPTIONS_MS"
+            :key="ms"
+            :label="`${ms / 1000}s`"
+            :value="ms"
+          />
+        </el-select>
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Download" @click="exportCsvData">Export</el-button>
-        <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
+        <el-button :icon="Refresh" :loading="store.loading" @click="loadData(true)"
+          >Refresh</el-button
+        >
       </div>
     </div>
     <p class="page-subtitle">Browse and manage recorded segments for each path.</p>
-    <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
+    <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData(true)" />
 
-    <el-card shadow="hover">
+    <el-card shadow="never">
       <el-table
-        v-loading="store.loading"
+        v-loading="initialLoading"
         :data="filteredList"
         style="width: 100%"
         :default-sort="sort.defaultSort"
         @sort-change="sort.onSortChange"
       >
         <el-table-column prop="name" label="Recording Name" min-width="200" show-overflow-tooltip />
-        <el-table-column label="Segments" width="115" align="center" sortable>
+        <el-table-column
+          label="Segments"
+          width="115"
+          align="center"
+          sortable
+          :sort-method="compareSegmentCount"
+        >
           <template #default="{ row }">{{ row.segments?.length || 0 }}</template>
         </el-table-column>
         <el-table-column label="Actions" width="90" fixed="right">
@@ -56,7 +77,7 @@
         </el-table-column>
       </el-table>
       <el-empty
-        v-if="!store.loading && filteredList.length === 0"
+        v-if="!error && !initialLoading && filteredList.length === 0"
         :description="search ? `No recordings match “${search}”` : 'No recordings yet'"
       />
       <div v-if="!search && store.itemCount > 0" class="pagination-bar">
@@ -73,7 +94,20 @@
       </div>
     </el-card>
 
-    <el-drawer v-model="drawerVisible" :title="currentRecording?.name" size="440px">
+    <el-drawer v-model="drawerVisible" size="440px">
+      <template #header>
+        <div class="drawer-header">
+          <span class="drawer-title">{{ currentRecording?.name }}</span>
+          <el-button
+            :icon="Refresh"
+            circle
+            size="small"
+            :loading="refreshingRecording"
+            aria-label="Refresh recording"
+            @click="refreshRecording"
+          />
+        </div>
+      </template>
       <template v-if="currentRecording">
         <h4 style="margin-bottom: 4px">
           Segments ({{ filteredSegments.length }})<span
@@ -83,8 +117,9 @@
           >
         </h4>
         <p class="drawer-hint">
-          Playback uses MediaMTX's playback server (default port 9996). Enable it with
-          <code>playback: yes</code> in mediamtx.yml if links don't load.
+          Playback uses MediaMTX's built-in playback server. If links don't load, make sure Playback
+          is enabled in
+          <router-link to="/config?tab=playback">System Config</router-link>.
         </p>
         <el-date-picker
           v-model="segDateRange"
@@ -103,7 +138,7 @@
           :default-sort="segSort.defaultSort"
           @sort-change="segSort.onSortChange"
         >
-          <el-table-column label="Start Time" sortable>
+          <el-table-column prop="start" label="Start Time" sortable>
             <template #default="{ row }">{{ formatDate(row.start) }}</template>
           </el-table-column>
           <el-table-column label="Duration" width="100" sortable prop="duration">
@@ -179,7 +214,7 @@
       />
       <p class="drawer-hint" style="margin-top: 10px; margin-bottom: 0">
         If playback fails, the MediaMTX playback server may not be enabled, or this segment's
-        estimated duration didn't match — try
+        duration is unknown — try
         <a :href="playingUrl" target="_blank" rel="noopener noreferrer">opening the link directly</a
         >.
       </p>
@@ -192,8 +227,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRecordingsStore } from '@/stores/recordings'
 import { useActivityStore } from '@/stores/activity'
+import { useConfigStore } from '@/stores/config'
 import { usePagination } from '@/composables/usePagination'
-import { useAutoRefresh, AUTO_REFRESH_INTERVAL_MS } from '@/composables/useAutoRefresh'
+import {
+  useAutoRefresh,
+  AUTO_REFRESH_INTERVAL_MS,
+  AUTO_REFRESH_INTERVAL_OPTIONS_MS
+} from '@/composables/useAutoRefresh'
 import { useSearchableList, filterList } from '@/composables/useSearchableList'
 import { useLastUpdated } from '@/composables/useLastUpdated'
 import { useListError } from '@/composables/useListError'
@@ -201,34 +241,61 @@ import { useTableSort } from '@/composables/useTableSort'
 import { exportCsv } from '@/composables/useCsvExport'
 import { formatDate, formatDuration } from '@/composables/useFormatters'
 import { buildPlaybackUrl } from '@/composables/useRecordingPlayback'
-import { ElMessage } from 'element-plus'
+import { playbackPortFromConfig } from '@/composables/useStreamUrls'
+import { toast } from '@/composables/useToast'
 import { Refresh, Search, View, VideoPlay, Download, Delete } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import type { APIRecording } from '@/types/api'
 
-const AUTO_REFRESH_INTERVAL_S = AUTO_REFRESH_INTERVAL_MS / 1000
 const SEG_PAGE_SIZE = 20
 
 const store = useRecordingsStore()
 const activityStore = useActivityStore()
+const configStore = useConfigStore()
 const route = useRoute()
 const drawerVisible = ref(false)
 const currentRecording = ref<APIRecording | null>(null)
+const refreshingRecording = ref(false)
 const playerVisible = ref(false)
 const playingUrl = ref('')
+// Playback links use the live `playbackAddress` port so they point at the real
+// server instead of a hard-coded 9996.
+const playbackPort = ref(9996)
+configStore
+  .ensureLoaded()
+  .then(cfg => {
+    playbackPort.value = playbackPortFromConfig(cfg)
+  })
+  .catch(() => {})
 // Prefilled when arriving via a "view this recording" link from the command
 // palette (e.g. /recordings?q=name).
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const segPage = ref(1)
 const segPageSize = SEG_PAGE_SIZE
 const segDateRange = ref<[Date, Date] | null>(null)
+// The loading mask is only meaningful while the table has nothing to render —
+// showing it on every auto-refresh tick makes the panel flash. Once the first
+// fetch lands, refreshes update rows in place and the refresh button's own
+// spinner covers the loading state.
+const initialLoading = ref(true)
 const { error, run } = useListError()
 const sort = useTableSort('sort:recordings')
 const segSort = useTableSort('sort:recording-segments')
 
 const filteredList = computed(() =>
   filterList(store.list, search.value, (r: APIRecording) => r.name)
+)
+
+// Sortable column for the segment count — the count isn't a row field, so it
+// needs an explicit comparator (a `prop` alone would sort by row[undefined]).
+const compareSegmentCount = (a: APIRecording, b: APIRecording) =>
+  (a.segments?.length || 0) - (b.segments?.length || 0)
+
+// While searching, the badge reflects what's on screen rather than the server
+// total (the list is fetched in full and filtered client-side).
+const displayedCount = computed(() =>
+  search.value.trim() ? filteredList.value.length : store.itemCount
 )
 
 // Date filter + client-side pagination for the segments table — recordings can
@@ -274,7 +341,24 @@ const segmentIndex = (start: string) => segmentIndexMap.value.get(start) ?? -1
 const segmentUrl = (start: string) => {
   const i = segmentIndex(start)
   if (i < 0 || !currentRecording.value?.segments) return ''
-  return buildPlaybackUrl(currentRecording.value.name, currentRecording.value.segments, i)
+  return buildPlaybackUrl(
+    currentRecording.value.name,
+    currentRecording.value.segments,
+    i,
+    playbackPort.value
+  )
+}
+
+const refreshRecording = async () => {
+  if (!currentRecording.value) return
+  refreshingRecording.value = true
+  try {
+    currentRecording.value = await store.fetchOne(currentRecording.value.name)
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Failed to refresh recording'))
+  } finally {
+    refreshingRecording.value = false
+  }
 }
 
 const playSegment = (start: string) => {
@@ -288,8 +372,8 @@ const handleDeleteSegment = async (name: string, start: string) => {
   try {
     await store.deleteSegment(name, start)
     // Reload from the user's current page (the store no longer re-fetches)
-    await loadData()
-    ElMessage.success('Segment deleted')
+    await loadData(true)
+    toast.success('Segment deleted')
     activityStore.log(`Deleted a recording segment from "${name}"`, 'success')
     // Reload details
     const updated = await store.fetchOne(name)
@@ -298,7 +382,7 @@ const handleDeleteSegment = async (name: string, start: string) => {
     const totalPages = Math.ceil((updated.segments?.length || 0) / segPageSize)
     if (segPage.value > totalPages && totalPages > 0) segPage.value = totalPages
   } catch (err) {
-    ElMessage.error(getErrorMessage(err, 'Failed to delete segment'))
+    toast.error(getErrorMessage(err, 'Failed to delete segment'))
   }
 }
 
@@ -309,13 +393,23 @@ const pagination = usePagination(
 )
 const lastUpdated = useLastUpdated()
 
-const loadData = async () => {
+// Whether the full list (all recordings, each with its segment arrays) is
+// already in the store. Search filters that list client-side, so typing more
+// must not re-download it on every debounced keystroke.
+let fullListLoaded = false
+
+const loadData = async (force = false) => {
   await run(async () => {
     if (search.value.trim()) {
-      await store.fetchList(0, 1000)
+      if (!fullListLoaded || force) {
+        await store.fetchList(0, 1000)
+        fullListLoaded = true
+      }
     } else {
+      fullListLoaded = false
       await pagination.load()
     }
+    initialLoading.value = false
     lastUpdated.markUpdated()
   }, 'Failed to load recordings')
 }
@@ -329,7 +423,11 @@ const exportCsvData = () => {
 }
 
 useSearchableList(search, () => loadData())
-const autoRefreshCtrl = useAutoRefresh(loadData, AUTO_REFRESH_INTERVAL_MS, 'autorefresh:recordings')
+const autoRefreshCtrl = useAutoRefresh(
+  () => loadData(true),
+  AUTO_REFRESH_INTERVAL_MS,
+  'autorefresh:recordings'
+)
 
 // Keep the search box in sync if the query changes while already on this page.
 watch(
@@ -345,6 +443,22 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.drawer-title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .drawer-hint {
   font-size: 12px;
   line-height: 1.5;
