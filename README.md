@@ -4,22 +4,17 @@ A modern web admin dashboard for [MediaMTX](https://github.com/bluenviron/mediam
 
 ## Features
 
-- **Dashboard** — Live overview with auto-refreshing stat tiles, source-type/protocol charts, a rolling bandwidth trend chart, and a connection-lost banner if the API becomes unreachable
-- **Path Management** — Live path status with search, sortable columns, pagination, CSV export, and a detail drawer with per-protocol stream links (RTSP/RTMP/HLS/WebRTC/SRT) plus in-browser WebRTC (WHEP) preview
-- **Path Configuration** — Full editor covering source, on-demand pulling, publish/read authentication, per-path recording, and run-on-ready hooks
-- **Connection Management** — Sortable, searchable, paginated tables across all protocols, with CSV export, bulk kick, and one-click kick where the API supports it:
-  - RTSP Connections (read-only) & Sessions (kickable)
-  - RTMP Connections (kickable)
-  - WebRTC Sessions (kickable)
-  - HLS Muxers (read-only)
-  - SRT Connections (kickable)
-- **Protocol awareness** — Friendly empty state when a protocol is disabled in MediaMTX config, with a link to enable it
-- **Recording Management** — Browse recordings, play or download individual segments (via MediaMTX's playback server), delete segments
-- **Global Configuration** — Edit all MediaMTX server settings, with unsaved-changes tracking, a confirm-before-apply step, and a JWT JWKS refresh action
-- **Command Palette** — Keyboard-driven navigation and actions (`⌘K` / `Ctrl+K`)
-- **Recent Activity** — Session-scoped log of admin actions (kicks, saves, deletes) in the header
-- **Theme Switching** — Light / Dark theme with a cohesive color system (tags, toasts, and alerts follow the active theme)
-- **Responsive** — Collapsible sidebar and mobile-friendly layout
+- **Dashboard** — Live KPIs, source-type and protocol charts, a session-local bandwidth trend, server health (version/uptime), and active paths with WHEP preview and copy-link; auto-refresh (on by default) with interval control and an API unreachable banner
+- **Path Status** — Search, status filter (online/available/offline), sortable columns, pagination, CSV export, detail drawer with per-protocol URLs (RTSP/RTMP/HLS/WebRTC/SRT from live config), and in-browser WebRTC (WHEP) playback
+- **Path Config** — Add/edit/duplicate/delete path configs: source & on-demand, publish/read auth, recording, run-on hooks, and advanced options (IP allowlists, override publish, record durations); search, pagination, and CSV export
+- **Connections** — Searchable, sortable, paginated tables with CSV export across RTSP connections (read-only), RTSP sessions, RTMP, WebRTC, HLS muxers (read-only), and SRT; single and bulk kick where the API supports it; path links back to Path Status
+- **Protocol awareness** — Disabled protocols are hidden from nav and the command palette; deep links show an empty state with a jump to the matching System Config tab
+- **Recordings** — Browse by path with search/sort/pagination/CSV; open a segment drawer (optional date filter) to play, download, or delete segments via MediaMTX playback
+- **System Config** — Edit common global settings (logging, auth, protocols, API, recording, playback) with dirty tracking, save confirmation, leave warnings, and JWT JWKS refresh
+- **Command palette** — `⌘K` / `Ctrl+K` to jump to pages or find paths and recordings by name
+- **Recent activity** — Session-scoped header log of admin actions plus path online/offline alerts
+- **Theme & layout** — Light/dark theme; top navigation that becomes a mobile slide-over below 1024px
+- **Live list controls** — Auto-refresh toggles with interval (5s/15s/30s), last-updated hints, theme-aware toasts, and list error banners with retry
 
 ## Tech Stack
 
