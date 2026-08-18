@@ -88,9 +88,32 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="130" fixed="right">
+        <el-table-column label="Forward" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag
+              v-if="forwardCount(row) > 0"
+              class="forward-tag"
+              type="primary"
+              size="small"
+              @click="openForward(row.name)"
+              >{{ forwardCount(row) }}</el-tag
+            >
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Actions" width="170" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
+              <el-tooltip content="Forward destinations" placement="top">
+                <el-button
+                  :icon="Promotion"
+                  circle
+                  size="small"
+                  plain
+                  aria-label="Forward destinations"
+                  @click="openForward(row.name)"
+                />
+              </el-tooltip>
               <el-tooltip content="Edit" placement="top">
                 <el-button
                   :icon="Edit"
@@ -167,6 +190,12 @@
         <el-button type="primary" :loading="saving" @click="handleSave">Save</el-button>
       </template>
     </el-dialog>
+
+    <ForwardDestsDrawer
+      v-model="forwardDrawerVisible"
+      :path-name="forwardPath"
+      @saved="loadData"
+    />
   </div>
 </template>
 
@@ -196,10 +225,12 @@ import {
   Edit,
   Delete,
   Download,
-  CopyDocument
+  CopyDocument,
+  Promotion
 } from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import PathConfForm from '@/components/PathConfForm.vue'
+import ForwardDestsDrawer from '@/components/ForwardDestsDrawer.vue'
 
 const store = usePathsConfigStore()
 const pathsStore = usePathsStore()
@@ -208,6 +239,8 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
 const search = ref('')
+const forwardDrawerVisible = ref(false)
+const forwardPath = ref('')
 // The loading mask is only meaningful while the table has nothing to render —
 // showing it on every auto-refresh tick makes the panel flash. Once the first
 // fetch lands, refreshes update rows in place and the refresh button's own
@@ -227,6 +260,14 @@ const displayedCount = computed(() =>
 // Live online/offline state, cross-linked from the Path Status store so admins
 // can see at a glance whether a configured path is currently being served.
 const liveState = computed(() => new Map(pathsStore.list.map(p => [p.name, !!p.online])))
+
+const forwardCount = (row: any): number =>
+  Array.isArray(row.forward) ? row.forward.length : 0
+
+const openForward = (name: string) => {
+  forwardPath.value = name
+  forwardDrawerVisible.value = true
+}
 
 const form = reactive<PathConfFormModel>(emptyPathConfForm())
 
@@ -315,14 +356,15 @@ const loadData = async () => {
 const exportCsvData = () => {
   exportCsv(
     `path-configs-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Path Name', 'Live', 'Source', 'On Demand', 'Protected', 'Recording'],
+    ['Path Name', 'Live', 'Source', 'On Demand', 'Protected', 'Recording', 'Forward'],
     filteredList.value.map((r: any) => [
       r.name,
       liveState.value.has(r.name) ? (liveState.value.get(r.name) ? 'Online' : 'Offline') : '—',
       r.source || '',
       r.sourceOnDemand ? 'Yes' : 'No',
       r.publishUser || r.readUser ? 'Yes' : 'No',
-      r.record ? 'Yes' : 'No'
+      r.record ? 'Yes' : 'No',
+      forwardCount(r)
     ])
   )
 }
@@ -340,3 +382,13 @@ onMounted(() => {
   pathsStore.fetchList(0, 1000).catch(() => {})
 })
 </script>
+
+<style scoped>
+.forward-tag {
+  cursor: pointer;
+}
+
+.forward-tag:hover {
+  opacity: 0.85;
+}
+</style>

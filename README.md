@@ -7,6 +7,7 @@ A modern web admin dashboard for [MediaMTX](https://github.com/bluenviron/mediam
 - **Dashboard** — Live KPIs, source-type and protocol charts, a persistent split inbound/outbound bandwidth trend (survives reloads), server health (version/uptime), a path frame-errors health KPI, and active paths with in-browser WebRTC (WHEP) preview and copy-link; auto-refresh (on by default) with interval control and an API unreachable banner
 - **Path Status** — Search, status filter (online/available/offline), sortable columns, pagination, CSV export, health badges, and a detail drawer with per-protocol URLs (RTSP/RTMP/HLS/WebRTC/SRT from live config, respecting encryption mode), codec tracks, timestamps, and a traffic sparkline
 - **Path Config** — Add/edit/duplicate/delete path configs: source & on-demand, publish/read auth, recording, run-on hooks, advanced options (IP allowlists, override publish, record durations), and a Path Defaults tab that new paths inherit; search, pagination, and CSV export
+- **Forward destinations** — Configure per-path forwarding (RTSP/RTSPS, RTMP/RTMPS, SRT, WHIP/WHIPS) from the Path Config page — TLS fingerprint and WHIP bearer-token support — and monitor live per-destination state (idle/forwarding/error), error details, outbound traffic, and creation time with auto-refresh
 - **Connections** — Searchable, sortable, paginated tables with CSV export across RTSP connections (read-only), RTSP sessions, RTMP, WebRTC, HLS muxers (read-only), and SRT; health badges and per-session detail drawers; single and bulk kick where the API supports it; path links back to Path Status
 - **Protocol awareness** — Disabled protocols are hidden from nav and the command palette; deep links show an empty state with a jump to the matching System Config tab
 - **Recordings** — Browse by path with search/sort/pagination/CSV; open a segment drawer (optional date filter) showing total duration with a copyable full playback URL; play segments in-browser via hls.js (controls, picture-in-picture, stats overlay); download or delete segments via MediaMTX playback
@@ -20,7 +21,14 @@ A modern web admin dashboard for [MediaMTX](https://github.com/bluenviron/mediam
 
 ## Version History
 
-### v2.2.0 — 2026-08-18 (latest)
+### v2.3.0 — 2026-08-18 (latest)
+
+- **Forward destinations** — configure per-path forwarding (RTSP/RTSPS, RTMP/RTMPS, SRT, WHIP/WHIPS) from the Path Config page, with TLS fingerprint and WHIP bearer-token support
+- **Forwarding monitor** — live per-destination state (idle/forwarding/error), error details, outbound traffic, and creation time, with auto-refresh
+- **MediaMTX 1.20.1 compatibility** — passwords are redacted to `<redacted>` in API responses and are now preserved on save instead of being overwritten; MoQ and HLS-session source/reader types are labeled correctly
+- **Forward count column** — Path Config shows how many destinations each path forwards to, plus a Forward action on every row
+
+### v2.2.0 — 2026-08-18
 
 - **Stream health monitoring** — health badges across connection and path lists, per-session detail drawers, and a dashboard frame-errors KPI
 - **Recording playback** — hls.js in-browser playback with controls, picture-in-picture, and a stats overlay; total duration and copyable full playback URL
@@ -160,6 +168,10 @@ src/
 ## API Compatibility
 
 All API calls target **MediaMTX v3 REST API** (`/v3/...`). The type definitions in `src/types/api.ts` are derived from the MediaMTX Go source (`internal/defs/api*.go`).
+
+Compatibility notes:
+
+- **MediaMTX ≥ 1.20.1** — the API redacts credentials to `<redacted>` in responses. Untouched passwords are preserved on save; forward destinations are edited through the path config's `forward` array and monitored via `/v3/paths/forward/list`.
 
 ## Feedback
 

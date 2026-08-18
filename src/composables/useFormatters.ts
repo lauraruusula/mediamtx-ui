@@ -84,11 +84,14 @@ export function formatSourceType(type: string): string {
     rtspsConn: 'RTSPS Connection',
     rtspConn: 'RTSP Connection',
     hlsMuxer: 'HLS Muxer',
+    hlsSession: 'HLS Session',
     rpiCameraSource: 'RPi Camera',
     rpiCameraSecondary: 'RPi Camera (Secondary)',
     redirect: 'Redirect',
     mpegtsSource: 'MPEG-TS Source',
-    rtpSource: 'RTP Source'
+    rtpSource: 'RTP Source',
+    moqSource: 'MoQ Source',
+    moqSession: 'MoQ Session'
   }
   return map[type] || type
 }

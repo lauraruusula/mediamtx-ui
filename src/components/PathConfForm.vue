@@ -61,13 +61,35 @@
           />
         </el-form-item>
         <el-form-item label="Publish Password">
-          <el-input v-model="form.publishPass" type="password" show-password />
+          <el-input
+            v-model="publishPassInput"
+            type="password"
+            show-password
+            :placeholder="
+              isRedacted(props.form.publishPass)
+                ? 'Unchanged — type a new password to replace it'
+                : ''
+            "
+          />
+          <span v-if="isRedacted(props.form.publishPass)" class="form-hint"
+            >Current password is kept when left empty.</span
+          >
         </el-form-item>
         <el-form-item label="Read User">
           <el-input v-model="form.readUser" placeholder="Leave empty to allow anyone to read" />
         </el-form-item>
         <el-form-item label="Read Password">
-          <el-input v-model="form.readPass" type="password" show-password />
+          <el-input
+            v-model="readPassInput"
+            type="password"
+            show-password
+            :placeholder="
+              isRedacted(props.form.readPass) ? 'Unchanged — type a new password to replace it' : ''
+            "
+          />
+          <span v-if="isRedacted(props.form.readPass)" class="form-hint"
+            >Current password is kept when left empty.</span
+          >
         </el-form-item>
         <el-form-item label="Publish IPs">
           <el-input
@@ -263,7 +285,11 @@
 /* eslint-disable vue/no-mutating-props */
 import { ref, computed, watch } from 'vue'
 import { toast } from '@/composables/useToast'
-import { fillPathConfForm, type PathConfForm } from '@/composables/usePathConfForm'
+import {
+  fillPathConfForm,
+  isRedactedCredential,
+  type PathConfForm
+} from '@/composables/usePathConfForm'
 
 const props = defineProps<{
   form: PathConfForm
@@ -294,6 +320,23 @@ const readIPsText = computed({
       .filter(Boolean)
   }
 })
+
+const isRedacted = isRedactedCredential
+
+// Passwords come back from the API as "<redacted>" (v1.20.1+). Show those as
+// empty fields with a placeholder — the model keeps the placeholder so saving
+// omits the field and the real password is preserved. Typing a value replaces
+// it; the Raw JSON tab can clear a password explicitly.
+const passwordInput = (key: 'publishPass' | 'readPass') =>
+  computed<string>({
+    get: () => (isRedacted(props.form[key]) ? '' : props.form[key]),
+    set: (v: string) => {
+      props.form[key] = v
+    }
+  })
+
+const publishPassInput = passwordInput('publishPass')
+const readPassInput = passwordInput('readPass')
 
 // Raw JSON tab — a snapshot of the form serialized for editing, kept in sync
 // whenever the tab becomes active so edits from other tabs are preserved.

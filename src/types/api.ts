@@ -30,9 +30,12 @@ export type APIPathSourceType =
   | 'rtpSource'
   | 'webRTCSession'
   | 'webRTCSource'
+  | 'moqSource'
+  | 'moqSession'
 
 export type APIPathReaderType =
   | 'hlsMuxer'
+  | 'hlsSession'
   | 'rtmpConn'
   | 'rtmpsConn'
   | 'rtspConn'
@@ -42,6 +45,8 @@ export type APIPathReaderType =
   | 'rtspsSession'
   | 'srtConn'
   | 'webRTCSession'
+  | 'moqSession'
+  | 'hidden'
 
 export interface APIPathSource {
   type: APIPathSourceType
@@ -209,4 +214,36 @@ export interface APIRecordingSegment {
 export interface APIRecording {
   name: string
   segments: APIRecordingSegment[]
+}
+
+// Forward destinations - config lives in a path's `forward` field;
+// live state comes from GET /v3/paths/forward/list?path= and
+// GET /v3/paths/forward/get?path=&id=
+export type APIForwardDestState = 'idle' | 'forwarding' | 'error'
+
+export type APIForwardDestProtocol =
+  | 'rtmp'
+  | 'rtmps'
+  | 'rtsp'
+  | 'rtsps'
+  | 'srt'
+  | 'whip'
+  | 'whips'
+
+// One entry of a path config's `forward` array
+export interface APIForwardDestConfig {
+  dest: string
+  destFingerprint: string
+  whipBearerToken: string
+}
+
+export interface APIForwardDest {
+  id: string
+  pos: number
+  created: string
+  conf: APIForwardDestConfig
+  protocol: APIForwardDestProtocol
+  state: APIForwardDestState
+  lastError: string
+  outboundBytes: number
 }

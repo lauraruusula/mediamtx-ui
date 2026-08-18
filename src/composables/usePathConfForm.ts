@@ -1,3 +1,11 @@
+// MediaMTX ≥ v1.20.1 redacts credentials in API responses, replacing any
+// non-empty password with this literal placeholder. Such values can only be
+// set, never read back, so a form holding the placeholder means "unchanged".
+export const REDACTED_CREDENTIAL = '<redacted>'
+
+export const isRedactedCredential = (v: unknown): boolean =>
+  typeof v === 'string' && v === REDACTED_CREDENTIAL
+
 export interface PathConfForm {
   name: string
   source: string
@@ -156,6 +164,16 @@ export function pathConfPayload(form: PathConfForm): Record<string, unknown> {
   for (const [key, value] of Object.entries(form)) {
     if (key === 'name') continue
     if (value === null || value === undefined) continue
+    // Passwords are redacted to "<redacted>" in API responses (v1.20.1+). The
+    // server copies every PATCHed field verbatim, so re-sending the
+    // placeholder would replace the real password with that literal string.
+    // Omit it instead, leaving the existing password untouched.
+    if (
+      (key === 'publishPass' || key === 'readPass') &&
+      isRedactedCredential(value)
+    ) {
+      continue
+    }
     if (key === 'source' && value === '') {
       data[key] = 'publisher'
     } else if (key === 'publishIPs' || key === 'readIPs') {

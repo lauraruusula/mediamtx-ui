@@ -608,6 +608,7 @@ import {
 } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { toast } from '@/composables/useToast'
+import { isRedactedCredential } from '@/composables/usePathConfForm'
 import PathDefaultsPanel from '@/components/PathDefaultsPanel.vue'
 
 const configStore = useConfigStore()
@@ -809,6 +810,16 @@ const saveConfig = async () => {
   for (const [key, value] of Object.entries(configStore.config)) {
     if (value === null || value === undefined) continue
     data[key] = value
+  }
+  // v1.20.1 redacts credentials in responses and the server copies every
+  // PATCHed field verbatim, so re-sending "<redacted>" would replace real
+  // internal-user passwords with that literal string. The form never edits
+  // internal users, so drop the field entirely to leave them untouched.
+  if (
+    Array.isArray(data.authInternalUsers) &&
+    data.authInternalUsers.some((u: any) => u && isRedactedCredential(u.pass))
+  ) {
+    delete data.authInternalUsers
   }
   try {
     await configStore.saveConfig(data)
