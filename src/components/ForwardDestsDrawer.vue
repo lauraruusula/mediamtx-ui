@@ -27,7 +27,7 @@
       </div>
     </template>
 
-    <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadAll" />
+    <ApiErrorBanner :message="error" :loading="loadingConfig" @retry="loadAll" />
 
     <!-- Configured destinations -->
     <div class="section-head">
@@ -89,7 +89,7 @@
     </div>
     <p class="section-desc">Current forwarding state as reported by the server.</p>
 
-    <el-table v-loading="store.loading" :data="store.list" size="small">
+    <el-table v-loading="initialLoading" :data="liveRows" size="small">
       <el-table-column label="Destination" min-width="170" show-overflow-tooltip>
         <template #default="{ row }">
           <code class="live-dest">{{ row.conf.dest }}</code>
@@ -113,7 +113,13 @@
         <template #default="{ row }">{{ formatDate(row.created) }}</template>
       </el-table-column>
     </el-table>
-    <p v-if="!store.loading && store.list.length === 0" class="drawer-hint">
+    <p v-if="liveError" class="live-error-hint">
+      Live status unavailable — this path may be offline right now.
+    </p>
+    <p
+      v-else-if="!initialLoading && liveRows.length === 0"
+      class="drawer-hint"
+    >
       No live forwarding reported — this usually means the path is offline right now.
     </p>
 
@@ -158,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useForwardDestsStore } from '@/stores/forwardDests'
 import { usePathsConfigStore } from '@/stores/pathsConfig'
 import { useActivityStore } from '@/stores/activity'
@@ -169,7 +175,7 @@ import { formatBytes, formatDate } from '@/composables/useFormatters'
 import { toast } from '@/composables/useToast'
 import { Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
-import type { APIForwardDestConfig } from '@/types/api'
+import type { APIForwardDest, APIForwardDestConfig } from '@/types/api'
 
 const props = defineProps<{
   modelValue: boolean
@@ -189,26 +195,56 @@ const { error, run } = useListError()
 // Configured destinations, loaded from the path's config `forward` array.
 const dests = ref<APIForwardDestConfig[]>([])
 const saving = ref(false)
+// The live table masks only until the first fetch lands — auto-refresh ticks
+// update rows in place so the table never flashes.
+const initialLoading = ref(true)
+const loadingConfig = ref(false)
+// Live-state failures (e.g. the path is simply offline) surface as a quiet
+// inline hint rather than the error banner, which stays for config errors.
+const liveError = ref('')
 
 const loadConfig = async () => {
-  const cfg = await pathsConfigStore.fetchOne(props.pathName)
-  dests.value = Array.isArray(cfg.forward)
-    ? cfg.forward.map((d: APIForwardDestConfig) => ({ ...d }))
-    : []
+  loadingConfig.value = true
+  try {
+    const cfg = await pathsConfigStore.fetchOne(props.pathName)
+    dests.value = Array.isArray(cfg.forward)
+      ? cfg.forward.map((d: APIForwardDestConfig) => ({ ...d }))
+      : []
+  } finally {
+    loadingConfig.value = false
+  }
 }
 
-const loadLive = () => store.fetchList(props.pathName)
+const loadLive = async () => {
+  try {
+    await store.fetchList(props.pathName)
+    liveError.value = ''
+  } catch {
+    liveError.value = 'unavailable'
+  }
+}
 
-const loadAll = () =>
-  run(
+// Only render rows that belong to the path currently in the drawer — the store
+// is shared and keeps the last-requested path's list, which could otherwise
+// flash for a different path while a fresh fetch is in flight.
+const liveRows = computed<APIForwardDest[]>(() =>
+  store.pathName === props.pathName ? store.list : []
+)
+
+const loadAll = async () => {
+  await run(
     async () => {
       await loadConfig()
-      await loadLive()
     },
     'Failed to load forward destinations'
   )
+  await loadLive()
+  initialLoading.value = false
+}
 
 const onOpen = () => {
+  initialLoading.value = true
+  liveError.value = ''
   loadAll()
   // Live status is the interesting part — poll it even if the config fetch
   // fails, and stop once the drawer closes.
@@ -217,6 +253,9 @@ const onOpen = () => {
 
 const onClosed = () => {
   autoRefreshCtrl.stop()
+  // The add/edit dialog is teleported to <body>; close it too so it never
+  // outlives the drawer it belongs to.
+  destDialogVisible.value = false
 }
 
 const autoRefreshCtrl = useAutoRefresh(loadLive)
@@ -296,7 +335,10 @@ const saveAll = async () => {
     await loadAll()
   } catch (err) {
     toast.error(getErrorMessage(err, 'Failed to save forward destinations'))
-    await loadConfig()
+    // Restore the server's version of the list so the UI never shows a state
+    // the server rejected. Best-effort — don't let a reload failure mask the
+    // original error.
+    await loadConfig().catch(() => {})
   } finally {
     saving.value = false
   }
@@ -408,6 +450,13 @@ const saveAll = async () => {
   line-height: 1.4;
   color: var(--el-color-danger);
   overflow-wrap: anywhere;
+}
+
+.live-error-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-color-warning);
 }
 
 .drawer-hint {

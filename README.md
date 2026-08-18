@@ -21,7 +21,13 @@ A modern web admin dashboard for [MediaMTX](https://github.com/bluenviron/mediam
 
 ## Version History
 
-### v2.3.0 — 2026-08-18 (latest)
+### v2.3.1 — 2026-08-18 (latest)
+
+- **Forward drawer fixes** — live status no longer shows another path's data between opens, live-status failures (e.g. an offline path) show a quiet inline hint instead of an error banner, the table no longer flashes its loading mask on every auto-refresh tick, and the add/edit dialog closes with the drawer
+- **Tests** — unit coverage for the credential-redaction payload logic (MediaMTX 1.20.1)
+- **Accessibility** — the Path Config forward-count tag is now keyboard reachable
+
+### v2.3.0 — 2026-08-18
 
 - **Forward destinations** — configure per-path forwarding (RTSP/RTSPS, RTMP/RTMPS, SRT, WHIP/WHIPS) from the Path Config page, with TLS fingerprint and WHIP bearer-token support
 - **Forwarding monitor** — live per-destination state (idle/forwarding/error), error details, outbound traffic, and creation time, with auto-refresh

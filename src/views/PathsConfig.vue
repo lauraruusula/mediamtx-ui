@@ -95,7 +95,10 @@
               class="forward-tag"
               type="primary"
               size="small"
+              role="button"
+              tabindex="0"
               @click="openForward(row.name)"
+              @keydown.enter.prevent="openForward(row.name)"
               >{{ forwardCount(row) }}</el-tag
             >
             <span v-else>-</span>
