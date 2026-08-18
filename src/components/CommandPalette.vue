@@ -58,11 +58,22 @@ import {
   VideoCamera,
   Files,
   Promotion,
-  Folder
+  Folder,
+  Refresh,
+  Moon,
+  BellFilled
 } from '@element-plus/icons-vue'
 import { usePathsStore } from '@/stores/paths'
+import { useThemeStore } from '@/stores/theme'
+import { useActivityStore } from '@/stores/activity'
 import { listRecordings } from '@/api/recordings'
 import { useConfigStore, type ProtocolKey } from '@/stores/config'
+import { toast } from '@/composables/useToast'
+import {
+  notificationsEnabled,
+  setNotificationsEnabled,
+  requestNotificationPermission
+} from '@/composables/usePathNotifications'
 import type { APIRecording, APIListResponse } from '@/types/api'
 
 const props = defineProps<{
@@ -76,6 +87,8 @@ const emit = defineEmits<{
 const router = useRouter()
 const pathsStore = usePathsStore()
 const configStore = useConfigStore()
+const themeStore = useThemeStore()
+const activityStore = useActivityStore()
 
 const visible = computed({
   get: () => props.visible,
@@ -194,6 +207,47 @@ const NAV_ITEMS: PaletteItem[] = [
   }
 ]
 
+// Quick actions that don't navigate anywhere but are handy from the palette.
+const ACTION_ITEMS: PaletteItem[] = [
+  {
+    key: 'action:theme',
+    group: 'Actions',
+    label: 'Toggle dark mode',
+    icon: Moon,
+    run: () => themeStore.toggleTheme()
+  },
+  {
+    key: 'action:activity',
+    group: 'Actions',
+    label: 'Clear activity log',
+    icon: BellFilled,
+    run: () => {
+      activityStore.clear()
+      toast.success('Activity log cleared')
+    }
+  },
+  {
+    key: 'action:notifications',
+    group: 'Actions',
+    label: 'Toggle path notifications',
+    icon: Refresh,
+    run: async () => {
+      if (!notificationsEnabled()) {
+        const granted = await requestNotificationPermission()
+        if (!granted) {
+          toast.error('Notifications are blocked by the browser')
+          return
+        }
+        setNotificationsEnabled(true)
+        toast.success('Path notifications enabled')
+      } else {
+        setNotificationsEnabled(false)
+        toast.info('Path notifications disabled')
+      }
+    }
+  }
+]
+
 // Pages for disabled protocols would 404 server-side, so they're hidden from
 // the palette until the global config confirms the protocol is on.
 const navItems = computed<PaletteItem[]>(() =>
@@ -225,14 +279,17 @@ const recordingItems = computed<PaletteItem[]>(() =>
 const items = computed(() => {
   const q = query.value.trim().toLowerCase()
   const match = (label: string) => !q || label.toLowerCase().includes(q)
-  const filtered = [...navItems.value, ...pathItems.value, ...recordingItems.value].filter(i =>
-    match(i.label)
-  )
+  const filtered = [
+    ...navItems.value,
+    ...pathItems.value,
+    ...recordingItems.value,
+    ...ACTION_ITEMS
+  ].filter(i => match(i.label))
   return q ? filtered : filtered.slice(0, MAX_EMPTY_QUERY_ITEMS)
 })
 
 const groups = computed(() => {
-  const order = ['Pages', 'Paths', 'Recordings']
+  const order = ['Pages', 'Paths', 'Recordings', 'Actions']
   const byGroup = new Map<string, PaletteItem[]>()
   for (const item of items.value) {
     if (!byGroup.has(item.group)) byGroup.set(item.group, [])

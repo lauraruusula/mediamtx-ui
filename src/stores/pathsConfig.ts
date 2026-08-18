@@ -52,6 +52,7 @@ export const usePathsConfigStore = defineStore('pathsConfig', () => {
   const fetchDefaults = async () => {
     const res = (await api.getPathConfigDefaults()) as any
     defaults.value = res
+    return res
   }
 
   const patchDefaults = async (data: any) => {

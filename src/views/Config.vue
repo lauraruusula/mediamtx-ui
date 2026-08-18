@@ -38,6 +38,23 @@
                 <el-option label="ERROR" value="error" />
               </el-select>
             </el-form-item>
+            <el-form-item label="Log Destinations">
+              <el-select
+                v-model="logDestinations"
+                multiple
+                collapse-tags
+                style="width: 100%"
+                placeholder="Where logs are written"
+              >
+                <el-option label="stdout" value="stdout" />
+                <el-option label="file" value="file" />
+                <el-option label="syslog" value="syslog" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Structured Logging">
+              <el-switch v-model="configStore.config.logStructured" />
+              <span class="form-hint">Emit logs as structured JSON instead of plain text</span>
+            </el-form-item>
             <el-form-item label="Log File">
               <el-input v-model="configStore.config.logFile" />
             </el-form-item>
@@ -60,6 +77,48 @@
                 :min="1"
                 style="width: 100%"
               />
+            </el-form-item>
+            <el-form-item label="Run on Connect">
+              <el-input v-model="configStore.config.runOnConnect" />
+              <span class="form-hint">Shell command run when any client connects</span>
+            </el-form-item>
+            <el-form-item label="Restart on Connect Hook Exit">
+              <el-switch v-model="configStore.config.runOnConnectRestart" />
+            </el-form-item>
+            <el-form-item label="Run on Disconnect">
+              <el-input v-model="configStore.config.runOnDisconnect" />
+              <span class="form-hint">Shell command run when any client disconnects</span>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <!-- Metrics config -->
+        <el-tab-pane lazy name="metrics">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Odometer /></el-icon>Metrics</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>Metrics</h2>
+            <p>
+              Prometheus metrics endpoint for scraping stream and server telemetry, plus optional
+              TLS.
+            </p>
+          </div>
+          <el-form :model="configStore.config" :label-width="formLabelWidth" class="config-form">
+            <el-form-item label="Enable Metrics">
+              <el-switch v-model="configStore.config.metrics" />
+            </el-form-item>
+            <el-form-item label="Metrics Address">
+              <el-input v-model="configStore.config.metricsAddress" />
+            </el-form-item>
+            <el-form-item label="Metrics Encryption">
+              <el-switch v-model="configStore.config.metricsEncryption" />
+              <span class="form-hint">Serve the metrics endpoint over HTTPS</span>
+            </el-form-item>
+            <el-form-item label="Metrics Allow Origins">
+              <el-input v-model="metricsAllowOriginsText" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -131,6 +190,37 @@
                 <el-option label="Required" value="strict" />
               </el-select>
             </el-form-item>
+            <el-form-item label="Transports">
+              <el-select
+                v-model="rtspTransports"
+                multiple
+                collapse-tags
+                style="width: 100%"
+                placeholder="RTSP transports to accept"
+              >
+                <el-option label="UDP" value="udp" />
+                <el-option label="Multicast" value="multicast" />
+                <el-option label="TCP" value="tcp" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Auth Methods">
+              <el-select
+                v-model="rtspAuthMethods"
+                multiple
+                collapse-tags
+                style="width: 100%"
+                placeholder="RTSP authentication methods"
+              >
+                <el-option label="Basic" value="basic" />
+                <el-option label="Digest" value="digest" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="RTP Address">
+              <el-input v-model="configStore.config.rtpAddress" />
+            </el-form-item>
+            <el-form-item label="RTCP Address">
+              <el-input v-model="configStore.config.rtcpAddress" />
+            </el-form-item>
           </el-form>
         </el-tab-pane>
 
@@ -195,6 +285,27 @@
                 <el-option label="Low Latency" value="lowLatency" />
               </el-select>
             </el-form-item>
+            <el-form-item label="Encryption">
+              <el-select v-model="configStore.config.hlsEncryption" style="width: 100%">
+                <el-option label="None" value="no" />
+                <el-option label="Optional" value="optional" />
+                <el-option label="Required" value="strict" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Always Remux">
+              <el-switch v-model="configStore.config.hlsAlwaysRemux" />
+              <span class="form-hint">Generate HLS even when no viewer is connected</span>
+            </el-form-item>
+            <el-form-item label="Allow Origins">
+              <el-input
+                v-model="hlsAllowOriginsText"
+                placeholder="Comma-separated origins, e.g. https://app.example.com"
+              />
+            </el-form-item>
+            <el-form-item label="Directory">
+              <el-input v-model="configStore.config.hlsDirectory" />
+              <span class="form-hint">Where to save HLS segments to disk (empty to disable)</span>
+            </el-form-item>
             <el-form-item label="Segment Count">
               <el-input-number
                 v-model="configStore.config.hlsSegmentCount"
@@ -204,6 +315,17 @@
             </el-form-item>
             <el-form-item label="Segment Duration">
               <el-input v-model="configStore.config.hlsSegmentDuration" />
+            </el-form-item>
+            <el-form-item label="Part Duration">
+              <el-input v-model="configStore.config.hlsPartDuration" />
+              <span class="form-hint">Duration of Low-Latency HLS parts</span>
+            </el-form-item>
+            <el-form-item label="Segment Max Size">
+              <el-input v-model="configStore.config.hlsSegmentMaxSize" />
+            </el-form-item>
+            <el-form-item label="Close Muxer After">
+              <el-input v-model="configStore.config.hlsMuxerCloseAfter" />
+              <span class="form-hint">Close muxers after inactivity</span>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -229,6 +351,19 @@
             <el-form-item label="WebRTC Address">
               <el-input v-model="configStore.config.webrtcAddress" />
             </el-form-item>
+            <el-form-item label="Encryption">
+              <el-select v-model="configStore.config.webrtcEncryption" style="width: 100%">
+                <el-option label="None" value="no" />
+                <el-option label="Optional" value="optional" />
+                <el-option label="Required" value="strict" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Additional Hosts">
+              <el-input v-model="webrtcAdditionalHostsText" placeholder="Comma-separated hosts" />
+              <span class="form-hint"
+                >Extra hosts/IPs advertised to remote peers (e.g. public IP)</span
+              >
+            </el-form-item>
             <el-form-item label="ICE Servers">
               <el-input
                 v-model="iceServersText"
@@ -247,6 +382,21 @@
                 placeholder="e.g. 203.0.113.10"
               />
               <span class="form-hint">Public IP to advertise to remote peers when behind NAT</span>
+            </el-form-item>
+            <el-form-item label="IPs from Interfaces">
+              <el-switch v-model="configStore.config.webrtcIPsFromInterfaces" />
+              <span class="form-hint"
+                >Automatically detect advertised IPs from network interfaces</span
+              >
+            </el-form-item>
+            <el-form-item label="STUN Gather Timeout">
+              <el-input v-model="configStore.config.webrtcSTUNGatherTimeout" />
+            </el-form-item>
+            <el-form-item label="Handshake Timeout">
+              <el-input v-model="configStore.config.webrtcHandshakeTimeout" />
+            </el-form-item>
+            <el-form-item label="Track Gather Timeout">
+              <el-input v-model="configStore.config.webrtcTrackGatherTimeout" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -298,6 +448,14 @@
             </el-form-item>
             <el-form-item label="API Encryption">
               <el-switch v-model="configStore.config.apiEncryption" />
+            </el-form-item>
+            <el-form-item label="Allow Origins">
+              <el-input v-model="apiAllowOriginsText" placeholder="Comma-separated origins" />
+              <span class="form-hint">CORS origins allowed to call the API</span>
+            </el-form-item>
+            <el-form-item label="Trusted Proxies">
+              <el-input v-model="apiTrustedProxiesText" placeholder="Comma-separated IPs/CIDRs" />
+              <span class="form-hint">Proxies whose X-Forwarded-For header is trusted</span>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -362,6 +520,62 @@
             </el-form-item>
           </el-form>
         </el-tab-pane>
+
+        <!-- Path defaults config -->
+        <el-tab-pane lazy name="pathdefaults">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Operation /></el-icon>Path Defaults</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>Path Defaults</h2>
+            <p>
+              Default configuration applied to every path. Individual paths can override these
+              settings in Path Config.
+            </p>
+          </div>
+          <PathDefaultsPanel />
+        </el-tab-pane>
+
+        <!-- Raw JSON config -->
+        <el-tab-pane lazy name="json">
+          <template #label>
+            <span class="tab-label"
+              ><el-icon><Document /></el-icon>Raw JSON</span
+            >
+          </template>
+          <div class="tab-heading">
+            <h2>Raw JSON</h2>
+            <p>
+              Edit the full config as JSON. Useful for fields the form does not expose. Click Apply
+              to load your edits into the form, then Save Config to send them to the server.
+            </p>
+          </div>
+          <div class="json-editor">
+            <el-input
+              v-model="jsonText"
+              type="textarea"
+              :rows="20"
+              class="json-textarea"
+              spellcheck="false"
+              placeholder="Loading config…"
+            />
+            <div class="json-actions">
+              <el-button :icon="MagicStick" @click="formatJson">Format</el-button>
+              <el-button type="primary" :icon="Check" :disabled="!jsonValid" @click="applyJson">
+                Apply to Form
+              </el-button>
+              <el-alert
+                v-if="jsonError"
+                :title="jsonError"
+                type="error"
+                show-icon
+                :closable="false"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
@@ -385,10 +599,16 @@ import {
   Promotion,
   Link,
   FolderOpened,
-  VideoPlay
+  VideoPlay,
+  Odometer,
+  Operation,
+  Document,
+  MagicStick,
+  Check
 } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { toast } from '@/composables/useToast'
+import PathDefaultsPanel from '@/components/PathDefaultsPanel.vue'
 
 const configStore = useConfigStore()
 const activityStore = useActivityStore()
@@ -398,6 +618,7 @@ const jwksRefreshing = ref(false)
 
 const validTabs = [
   'general',
+  'metrics',
   'auth',
   'rtsp',
   'rtmp',
@@ -406,7 +627,9 @@ const validTabs = [
   'srt',
   'api',
   'record',
-  'playback'
+  'playback',
+  'pathdefaults',
+  'json'
 ]
 
 // Tabs sit in a left rail on wide screens and move to a horizontal bar on
@@ -433,6 +656,93 @@ const iceServersText = computed({
       .split('\n')
       .map(s => s.trim())
       .filter(Boolean)
+  }
+})
+
+// Fields that are arrays in the API config but edited as comma-separated text
+// in the form.
+const commaList = (key: string) =>
+  computed<string>({
+    get: () => (Array.isArray(configStore.config[key]) ? configStore.config[key].join(', ') : ''),
+    set: (value: string) => {
+      configStore.config[key] = value
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+    }
+  })
+
+const arrayList = (key: string) =>
+  computed<string[]>({
+    get: () => (Array.isArray(configStore.config[key]) ? configStore.config[key] : []),
+    set: (value: string[]) => {
+      configStore.config[key] = value
+    }
+  })
+
+const logDestinations = arrayList('logDestinations')
+const rtspTransports = arrayList('rtspTransports')
+const rtspAuthMethods = arrayList('rtspAuthMethods')
+const hlsAllowOriginsText = commaList('hlsAllowOrigins')
+const webrtcAdditionalHostsText = commaList('webrtcAdditionalHosts')
+const apiAllowOriginsText = commaList('apiAllowOrigins')
+const apiTrustedProxiesText = commaList('apiTrustedProxies')
+const metricsAllowOriginsText = commaList('metricsAllowOrigins')
+
+// Raw JSON editor: synced from the loaded config whenever the tab opens, and
+// applied back onto the reactive config (which marks the form dirty).
+const jsonText = ref('')
+const jsonError = ref('')
+const jsonValid = ref(true)
+
+const syncJson = () => {
+  jsonText.value = JSON.stringify(configStore.config, null, 2)
+  jsonError.value = ''
+  jsonValid.value = true
+}
+
+watch(activeTab, tab => {
+  if (tab === 'json') syncJson()
+})
+
+const formatJson = () => {
+  try {
+    jsonText.value = JSON.stringify(JSON.parse(jsonText.value), null, 2)
+    jsonError.value = ''
+    jsonValid.value = true
+  } catch {
+    jsonError.value = 'Invalid JSON'
+    jsonValid.value = false
+  }
+}
+
+const applyJson = () => {
+  try {
+    const parsed = JSON.parse(jsonText.value)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      jsonError.value = 'Config must be a JSON object'
+      jsonValid.value = false
+      return
+    }
+    Object.assign(configStore.config, parsed)
+    jsonError.value = ''
+    jsonValid.value = true
+    toast.success('JSON applied to form — Save Config to persist')
+  } catch {
+    jsonError.value = 'Invalid JSON'
+    jsonValid.value = false
+  }
+}
+
+// Keep the Apply button honest while typing — Format/Apply report the specific
+// error, this just disables Apply the moment the text stops parsing.
+watch(jsonText, () => {
+  try {
+    JSON.parse(jsonText.value)
+    jsonError.value = ''
+    jsonValid.value = true
+  } catch {
+    jsonValid.value = false
   }
 })
 
@@ -665,6 +975,29 @@ onBeforeUnmount(() => {
 /* Constrain forms so inputs don't stretch the full panel width */
 .config-form {
   max-width: 640px;
+}
+
+.json-editor {
+  max-width: 900px;
+}
+
+.json-editor .json-textarea :deep(textarea) {
+  font-family: var(--font-mono, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.json-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.json-actions .el-alert {
+  flex: 1 1 100%;
+  margin-top: 4px;
 }
 
 .page-header h1 {

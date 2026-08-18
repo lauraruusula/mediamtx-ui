@@ -33,7 +33,7 @@ const props = defineProps<{
 }>()
 
 const configStore = useConfigStore()
-const streamCfg = ref<StreamUrlConfig>({ ports: {}, enabled: {} })
+const streamCfg = ref<StreamUrlConfig>({ ports: {}, enabled: {}, encryption: {} })
 const portsLoaded = ref(false)
 
 // Use the live global config so the URLs reflect the server's real ports and
@@ -54,7 +54,13 @@ onMounted(() => {
 const httpScheme = window.location.protocol === 'https:' ? 'https' : 'http'
 
 const urls = computed(() =>
-  buildStreamUrls(props.pathName, streamCfg.value.ports, streamCfg.value.enabled, httpScheme)
+  buildStreamUrls(
+    props.pathName,
+    streamCfg.value.ports,
+    streamCfg.value.enabled,
+    httpScheme,
+    streamCfg.value.encryption
+  )
 )
 
 async function handleCopy(u: StreamUrl) {

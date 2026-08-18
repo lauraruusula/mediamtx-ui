@@ -1,9 +1,16 @@
 <template>
   <div class="stream-player">
-    <video ref="videoEl" autoplay playsinline muted @click="toggleControls" />
+    <video
+      ref="videoEl"
+      autoplay
+      playsinline
+      muted
+      @click="togglePlay"
+      @dblclick="toggleFullscreen"
+    />
 
-    <!-- Overlay: connecting / error -->
-    <div v-if="player.state.value !== 'connected'" class="player-overlay">
+    <!-- Overlay: connecting / error / paused -->
+    <div v-if="player.state.value !== 'connected' && !isPaused" class="player-overlay">
       <template v-if="player.state.value === 'connecting'">
         <el-icon class="spin" :size="36"><Loading /></el-icon>
         <span class="overlay-text">Connecting...</span>
@@ -25,12 +32,29 @@
       </template>
     </div>
 
+    <!-- Center play button while paused -->
+    <button v-if="isPaused" class="center-play" aria-label="Play" @click="togglePlay">
+      <el-icon :size="40"><VideoPlay /></el-icon>
+    </button>
+
     <!-- Bottom toolbar -->
     <div
       class="player-toolbar"
-      :class="{ visible: showControls || player.state.value !== 'connected' }"
+      :class="{ visible: showControls || player.state.value !== 'connected' || isPaused }"
     >
       <div class="toolbar-left">
+        <el-button
+          text
+          size="small"
+          class="toolbar-btn"
+          :aria-label="isPaused ? 'Play' : 'Pause'"
+          @click="togglePlay"
+        >
+          <el-icon :size="18">
+            <VideoPause v-if="!isPaused" />
+            <VideoPlay v-else />
+          </el-icon>
+        </el-button>
         <el-tag size="small" type="success" effect="dark">WebRTC</el-tag>
         <span class="path-label">{{ pathName }}</span>
       </div>
@@ -56,6 +80,26 @@
           @input="setVolume"
         />
         <el-button
+          v-if="pipSupported"
+          text
+          size="small"
+          class="toolbar-btn"
+          aria-label="Toggle picture in picture"
+          @click="togglePip"
+        >
+          <el-icon :size="18"><Rank /></el-icon>
+        </el-button>
+        <el-button
+          text
+          size="small"
+          class="toolbar-btn"
+          :class="{ active: statsVisible }"
+          aria-label="Toggle stats"
+          @click="statsVisible = !statsVisible"
+        >
+          <el-icon :size="18"><DataAnalysis /></el-icon>
+        </el-button>
+        <el-button
           text
           size="small"
           class="toolbar-btn"
@@ -64,6 +108,22 @@
         >
           <el-icon :size="18"><FullScreen /></el-icon>
         </el-button>
+      </div>
+    </div>
+
+    <!-- Stats overlay -->
+    <div v-if="statsVisible" class="stats-panel">
+      <div class="stats-row">
+        <span>Resolution</span><strong>{{ stats.resolution }}</strong>
+      </div>
+      <div class="stats-row">
+        <span>Bitrate</span><strong>{{ stats.bitrate }}</strong>
+      </div>
+      <div class="stats-row">
+        <span>RTT</span><strong>{{ stats.rtt }}</strong>
+      </div>
+      <div class="stats-row">
+        <span>Dropped frames</span><strong>{{ stats.dropped }}</strong>
       </div>
     </div>
   </div>
@@ -78,8 +138,11 @@ import {
   Loading,
   CircleCloseFilled,
   VideoPlay,
+  VideoPause,
   Mute,
   Microphone,
+  Rank,
+  DataAnalysis,
   FullScreen
 } from '@element-plus/icons-vue'
 
@@ -93,6 +156,16 @@ const player = useWebRTCPlayer(videoEl)
 const showControls = ref(true)
 const isMuted = ref(true)
 const volume = ref(100)
+const isPaused = ref(false)
+const statsVisible = ref(false)
+const pipSupported =
+  typeof document !== 'undefined' && 'requestPictureInPicture' in HTMLVideoElement.prototype
+
+const stats = ref({ resolution: '—', bitrate: '—', rtt: '—', dropped: '—' })
+let lastBytes = 0
+let lastBytesAt = 0
+let statsTimer: ReturnType<typeof setInterval> | null = null
+
 const configStore = useConfigStore()
 const whepPort = ref(8889)
 let controlsTimer: ReturnType<typeof setTimeout> | null = null
@@ -137,6 +210,17 @@ function retry() {
   startPlayer()
 }
 
+function togglePlay() {
+  const el = videoEl.value
+  if (!el) return
+  if (el.paused) {
+    el.play().catch(() => {})
+  } else {
+    el.pause()
+  }
+  resetControlsTimer()
+}
+
 function toggleMute() {
   if (videoEl.value) {
     videoEl.value.muted = !videoEl.value.muted
@@ -170,9 +254,48 @@ function toggleFullscreen() {
   }
 }
 
-function toggleControls() {
-  showControls.value = !showControls.value
-  resetControlsTimer()
+async function togglePip() {
+  const el = videoEl.value
+  if (!el) return
+  try {
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture()
+    } else {
+      await el.requestPictureInPicture()
+    }
+  } catch {
+    // PiP unavailable for this stream — ignore
+  }
+}
+
+async function updateStats() {
+  const el = videoEl.value
+  if (!el) return
+  if (el.videoWidth) stats.value.resolution = `${el.videoWidth}×${el.videoHeight}`
+  const quality = el.getVideoPlaybackQuality?.()
+  if (quality) stats.value.dropped = String(quality.droppedVideoFrames || 0)
+
+  const report = await player.getStats()
+  if (!report) return
+  let bytes = 0
+  let rtt: number | null = null
+  report.forEach(stat => {
+    if (stat.type === 'inbound-rtp' && (stat.mediaType === 'video' || stat.kind === 'video')) {
+      bytes = stat.bytesReceived || 0
+    }
+    if (stat.type === 'candidate-pair' && stat.nominated && stat.state === 'succeeded') {
+      // `currentRoundTripTime` isn't on the base RTCStats type.
+      rtt = (stat as any).currentRoundTripTime ?? null
+    }
+  })
+  const now = performance.now()
+  if (lastBytesAt && bytes >= lastBytes) {
+    const bps = ((bytes - lastBytes) * 8000) / (now - lastBytesAt)
+    stats.value.bitrate = `${(bps / 1e6).toFixed(2)} Mbps`
+  }
+  lastBytes = bytes
+  lastBytesAt = now
+  stats.value.rtt = rtt != null ? `${Math.round(rtt * 1000)} ms` : '—'
 }
 
 function resetControlsTimer() {
@@ -192,14 +315,33 @@ watch(
   }
 )
 
+watch(
+  () => player.state.value,
+  state => {
+    if (state === 'connected') {
+      statsVisible.value = false
+    }
+  }
+)
+
 onMounted(() => {
+  videoEl.value?.addEventListener('pause', () => {
+    isPaused.value = true
+  })
+  videoEl.value?.addEventListener('play', () => {
+    isPaused.value = false
+  })
   configReady.then(() => startPlayer())
+  statsTimer = setInterval(() => {
+    if (statsVisible.value) updateStats()
+  }, 1000)
 })
 
 onBeforeUnmount(() => {
   disposed = true
   player.disconnect()
   if (controlsTimer) clearTimeout(controlsTimer)
+  if (statsTimer) clearInterval(statsTimer)
 })
 </script>
 
@@ -322,5 +464,60 @@ onBeforeUnmount(() => {
 
 .volume-slider :deep(.el-slider__button-wrapper) {
   top: -17px;
+}
+
+.center-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: background-color 0.2s ease;
+}
+
+.center-play:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.toolbar-btn.active {
+  color: var(--el-color-primary) !important;
+}
+
+.stats-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  min-width: 180px;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 2px 0;
+}
+
+.stats-row span {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.stats-row strong {
+  font-variant-numeric: tabular-nums;
 }
 </style>

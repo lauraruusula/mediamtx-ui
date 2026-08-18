@@ -78,19 +78,34 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="Path" min-width="150" show-overflow-tooltip>
+          <el-table-column label="Path" min-width="130" show-overflow-tooltip>
             <template #default="{ row }"><PathLink :path="row.path" /></template>
           </el-table-column>
-          <el-table-column prop="remoteAddr" label="Remote Address" width="160" />
-          <el-table-column label="Inbound" width="120" sortable prop="inboundBytes">
+          <el-table-column label="Health" width="120">
+            <template #default="{ row }">
+              <HealthBadge :info="discardedFramesHealth(row.outboundFramesDiscarded)" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="remoteAddr" label="Remote Address" width="140" />
+          <el-table-column label="Inbound" width="110" sortable prop="inboundBytes">
             <template #default="{ row }">{{ formatBytes(row.inboundBytes || 0) }}</template>
           </el-table-column>
-          <el-table-column label="Outbound" width="120" sortable prop="outboundBytes">
+          <el-table-column label="Outbound" width="110" sortable prop="outboundBytes">
             <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
           </el-table-column>
-          <el-table-column label="Actions" width="90" fixed="right">
+          <el-table-column label="Actions" width="125" fixed="right">
             <template #default="{ row }">
               <div class="row-actions">
+                <el-tooltip content="View details" placement="top">
+                  <el-button
+                    :icon="View"
+                    circle
+                    size="small"
+                    plain
+                    aria-label="View details"
+                    @click="openDetail(row as APIRTMPConn)"
+                  />
+                </el-tooltip>
                 <el-popconfirm
                   title="Kick this connection? The client will be disconnected immediately."
                   @confirm="handleKick(row.id)"
@@ -129,6 +144,27 @@
         </div>
       </el-card>
     </template>
+
+    <SessionDetailDrawer
+      v-model="detailVisible"
+      :title="current ? `RTMP Connection ${current.id.slice(0, 8)}…` : ''"
+      :rows="detailRows"
+      :refreshing="refreshingDetail"
+      @refresh="refreshDetail"
+    >
+      <template #actions>
+        <el-button
+          v-if="current"
+          type="danger"
+          size="small"
+          plain
+          :icon="SwitchButton"
+          @click="handleKick(current.id)"
+        >
+          Kick
+        </el-button>
+      </template>
+    </SessionDetailDrawer>
   </div>
 </template>
 
@@ -149,13 +185,16 @@ import { useListError } from '@/composables/useListError'
 import { useTableSort } from '@/composables/useTableSort'
 import { useBulkKick, type KickableTable } from '@/composables/useBulkKick'
 import { exportCsv } from '@/composables/useCsvExport'
-import { formatBytes, formatState } from '@/composables/useFormatters'
-import { Refresh, Search, SwitchButton, Download } from '@element-plus/icons-vue'
+import { formatBytes, formatDate, formatState } from '@/composables/useFormatters'
+import { discardedFramesHealth, healthTagType } from '@/composables/useStreamHealth'
+import { Refresh, Search, SwitchButton, Download, View } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { toast } from '@/composables/useToast'
 import PathLink from '@/components/PathLink.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import ProtocolDisabled from '@/components/ProtocolDisabled.vue'
+import HealthBadge from '@/components/HealthBadge.vue'
+import SessionDetailDrawer, { type DetailRow } from '@/components/SessionDetailDrawer.vue'
 import type { APIRTMPConn } from '@/types/api'
 
 const store = useRtmpConnStore()
@@ -179,6 +218,10 @@ const { error, run } = useListError()
 const sort = useTableSort('sort:rtmp-connections')
 const tableRef = ref<KickableTable | null>(null)
 const bulk = useBulkKick(store, 'RTMP connection')
+
+const detailVisible = ref(false)
+const current = ref<APIRTMPConn | null>(null)
+const refreshingDetail = ref(false)
 
 const filteredList = computed(() =>
   filterList(
@@ -214,8 +257,50 @@ const handleKick = async (id: string) => {
     await store.kick(id)
     toast.success('Connection kicked')
     activityStore.log(`Kicked an RTMP connection (${id.slice(0, 8)}…)`, 'error')
+    if (current.value?.id === id) current.value = null
   } catch (err) {
     toast.error(getErrorMessage(err, 'Failed to kick connection'))
+  }
+}
+
+const detailRows = computed<DetailRow[]>(() => {
+  const c = current.value
+  if (!c) return []
+  const health = discardedFramesHealth(c.outboundFramesDiscarded)
+  return [
+    { label: 'ID', value: c.id },
+    {
+      label: 'Status',
+      tag: {
+        text: formatState(c.state),
+        type: c.state === 'publish' ? 'danger' : c.state === 'read' ? 'success' : 'info'
+      }
+    },
+    { label: 'Path', value: c.path || '—' },
+    { label: 'Remote Address', value: c.remoteAddr || '—' },
+    { label: 'User', value: c.user || '—' },
+    { label: 'Health', tag: { text: health.label, type: healthTagType(health.level) } },
+    { label: 'Inbound Traffic', value: formatBytes(c.inboundBytes || 0) },
+    { label: 'Outbound Traffic', value: formatBytes(c.outboundBytes || 0) },
+    { label: 'Frames Discarded', value: c.outboundFramesDiscarded || 0 },
+    { label: 'Created', value: formatDate(c.created) }
+  ]
+})
+
+const openDetail = (row: APIRTMPConn) => {
+  current.value = row
+  detailVisible.value = true
+}
+
+const refreshDetail = async () => {
+  if (!current.value) return
+  refreshingDetail.value = true
+  try {
+    await loadData()
+    const fresh = store.list.find(c => c.id === current.value!.id)
+    if (fresh) current.value = fresh
+  } finally {
+    refreshingDetail.value = false
   }
 }
 
@@ -227,12 +312,13 @@ const handleKickSelected = async () => {
 const exportCsvData = () => {
   exportCsv(
     `rtmp-connections-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['ID', 'Status', 'Path', 'Remote Address', 'Inbound', 'Outbound'],
+    ['ID', 'Status', 'Path', 'Remote Address', 'Health', 'Inbound', 'Outbound'],
     filteredList.value.map(c => [
       c.id,
       formatState(c.state),
       c.path || '',
       c.remoteAddr || '',
+      discardedFramesHealth(c.outboundFramesDiscarded).label,
       c.inboundBytes || 0,
       c.outboundBytes || 0
     ])

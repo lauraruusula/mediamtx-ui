@@ -413,6 +413,16 @@ export function useWebRTCPlayer(
     }
   }
 
+  /** Live RTCPeerConnection stats, or null while not connected. */
+  async function getStats(): Promise<RTCStatsReport | null> {
+    if (!pc || pc.connectionState !== 'connected') return null
+    try {
+      return await pc.getStats()
+    } catch {
+      return null
+    }
+  }
+
   function disconnect() {
     closed = true
     if (restartTimeout) {
@@ -440,6 +450,7 @@ export function useWebRTCPlayer(
     state,
     error,
     connect,
-    disconnect
+    disconnect,
+    getStats
   }
 }

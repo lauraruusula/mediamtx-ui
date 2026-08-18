@@ -46,6 +46,16 @@
       class="dash-alert"
     />
 
+    <el-alert
+      v-if="systemStore.pathsWithErrors > 0"
+      type="warning"
+      show-icon
+      :closable="false"
+      title="Streams reporting errors"
+      :description="`${systemStore.pathsWithErrors} path(s) are reporting inbound frame errors — check Path Status for details.`"
+      class="dash-alert"
+    />
+
     <!-- Server health strip -->
     <div class="health-strip" :class="{ offline: !systemStore.connected }">
       <div class="health-status">
@@ -117,7 +127,7 @@
             ></span>
             <span>Bandwidth Trend</span>
             <span class="panel-hint"
-              >this session, updates every {{ autoRefreshCtrl.interval.value / 1000 }}s</span
+              >updates every {{ autoRefreshCtrl.interval.value / 1000 }}s · survives reloads</span
             >
           </div>
           <div class="panel-stats">
@@ -128,6 +138,14 @@
             <div class="panel-stat">
               <span class="panel-stat-label">Peak</span>
               <span class="panel-stat-value">{{ formatBytes(peakBandwidthRate) }}/s</span>
+            </div>
+            <div class="panel-stat">
+              <span class="panel-stat-label"><span class="rate-dot rate-in" />Inbound</span>
+              <span class="panel-stat-value">{{ formatBytes(currentInboundRate) }}/s</span>
+            </div>
+            <div class="panel-stat">
+              <span class="panel-stat-label"><span class="rate-dot rate-out" />Outbound</span>
+              <span class="panel-stat-value">{{ formatBytes(currentOutboundRate) }}/s</span>
             </div>
           </div>
         </div>
@@ -229,6 +247,11 @@
         <el-table-column label="Readers" width="90" align="center">
           <template #default="{ row }">{{ row.readers?.length || 0 }}</template>
         </el-table-column>
+        <el-table-column label="Health" width="120">
+          <template #default="{ row }">
+            <HealthBadge :info="pathHealth(row)" />
+          </template>
+        </el-table-column>
         <el-table-column label="Inbound" width="120">
           <template #default="{ row }">{{ formatBytes(row.inboundBytes || 0) }}</template>
         </el-table-column>
@@ -303,19 +326,18 @@ import {
   PieChart,
   Histogram
 } from '@element-plus/icons-vue'
+import { useCountUp } from '@/composables/useCountUp'
+import { pathHealth } from '@/composables/useStreamHealth'
 import StreamPlayer from '@/components/StreamPlayer.vue'
 import CopyLinkButton from '@/components/CopyLinkButton.vue'
 import UptimeText from '@/components/UptimeText.vue'
-import { useCountUp } from '@/composables/useCountUp'
+import HealthBadge from '@/components/HealthBadge.vue'
 import type { APIPath } from '@/types/api'
 
 // ECharts is only used on this page, so it's bundled as a separate chunk that
 // starts loading when the dashboard first renders instead of on app boot.
 const VChart = defineAsyncComponent(() => import('@/echarts').then(m => m.VChart))
 
-// The trend chart keeps up to this many samples; the window length depends on
-// the chosen refresh interval (5m at 5s, 30m at 30s).
-const MAX_SAMPLES = 60
 // Protocol-count KPIs don't need the fast poll cadence — they refresh on a
 // slower timer than the path tick so the dashboard doesn't fan out 8 requests
 // (info + paths + 6 count probes) every interval.
@@ -340,11 +362,51 @@ const readersDisplay = useCountUp(() => systemStore.totalReaders)
 
 // MediaMTX's API is a snapshot with no history, so the bandwidth trend chart
 // keeps its own small client-side rolling buffer, sampled on every refresh.
+// It's persisted to localStorage so a reload doesn't wipe the trend.
 interface BandwidthSample {
   time: number
-  bytes: number
+  inbound: number
+  outbound: number
 }
-const bandwidthHistory = ref<BandwidthSample[]>([])
+const BANDWIDTH_STORAGE_KEY = 'dash:bandwidth-history'
+// Window length at the default 5s interval (120 samples × 5s = 10 minutes).
+const MAX_SAMPLES = 120
+// Samples older than this are treated as a previous session and dropped, so
+// opening the dashboard hours later doesn't draw a misleading flat line from
+// stale data points.
+const MAX_SAMPLE_AGE_MS = 10 * 60 * 1000
+
+const loadBandwidthHistory = (): BandwidthSample[] => {
+  try {
+    const raw = localStorage.getItem(BANDWIDTH_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (s): s is BandwidthSample =>
+        typeof s === 'object' &&
+        s !== null &&
+        typeof s.time === 'number' &&
+        typeof s.inbound === 'number' &&
+        typeof s.outbound === 'number'
+    )
+  } catch {
+    return []
+  }
+}
+
+const persistBandwidthHistory = () => {
+  try {
+    localStorage.setItem(
+      BANDWIDTH_STORAGE_KEY,
+      JSON.stringify(bandwidthHistory.value.slice(-MAX_SAMPLES))
+    )
+  } catch {
+    // Storage full or unavailable — the trend just won't survive a reload.
+  }
+}
+
+const bandwidthHistory = ref<BandwidthSample[]>(loadBandwidthHistory())
 
 // The placeholder tells the user why the chart is empty and what to do next —
 // the guidance differs depending on whether polling is already on.
@@ -357,9 +419,21 @@ const bandwidthPlaceholderText = computed(() =>
 const recordBandwidthSample = () => {
   bandwidthHistory.value.push({
     time: Date.now(),
-    bytes: systemStore.totalInboundBytes + systemStore.totalOutboundBytes
+    inbound: systemStore.totalInboundBytes,
+    outbound: systemStore.totalOutboundBytes
   })
   if (bandwidthHistory.value.length > MAX_SAMPLES) bandwidthHistory.value.shift()
+  persistBandwidthHistory()
+}
+
+const clearStaleSamples = () => {
+  const history = bandwidthHistory.value
+  if (!history.length) return
+  const latest = history[history.length - 1].time
+  if (Date.now() - latest > MAX_SAMPLE_AGE_MS) {
+    bandwidthHistory.value = []
+    persistBandwidthHistory()
+  }
 }
 
 // ECharts renders to <canvas>, which can't resolve CSS custom properties like
@@ -443,27 +517,43 @@ const kpiCards = computed<KpiCard[]>(() => {
 // and the Current/Peak pills in the panel header.
 interface BandwidthRate {
   time: number
-  rate: number
+  inboundRate: number
+  outboundRate: number
 }
 const bandwidthRates = computed<BandwidthRate[]>(() => {
   const samples = bandwidthHistory.value
   const rates: BandwidthRate[] = []
   for (let i = 1; i < samples.length; i++) {
     const dt = (samples[i].time - samples[i - 1].time) / 1000
-    const db = samples[i].bytes - samples[i - 1].bytes
-    rates.push({ time: samples[i].time, rate: dt > 0 ? Math.max(db / dt, 0) : 0 })
+    rates.push({
+      time: samples[i].time,
+      inboundRate: dt > 0 ? Math.max((samples[i].inbound - samples[i - 1].inbound) / dt, 0) : 0,
+      outboundRate: dt > 0 ? Math.max((samples[i].outbound - samples[i - 1].outbound) / dt, 0) : 0
+    })
   }
   return rates
 })
 
 const currentBandwidthRate = computed(() => {
   const rates = bandwidthRates.value
-  return rates.length ? rates[rates.length - 1].rate : 0
+  if (!rates.length) return 0
+  const last = rates[rates.length - 1]
+  return last.inboundRate + last.outboundRate
 })
 
 const peakBandwidthRate = computed(() => {
   const rates = bandwidthRates.value
-  return rates.length ? Math.max(...rates.map(r => r.rate)) : 0
+  return rates.length ? Math.max(...rates.map(r => r.inboundRate + r.outboundRate)) : 0
+})
+
+const currentInboundRate = computed(() => {
+  const rates = bandwidthRates.value
+  return rates.length ? rates[rates.length - 1].inboundRate : 0
+})
+
+const currentOutboundRate = computed(() => {
+  const rates = bandwidthRates.value
+  return rates.length ? rates[rates.length - 1].outboundRate : 0
 })
 
 const pieOption = computed(() => {
@@ -529,22 +619,34 @@ const barOption = computed(() => {
 })
 
 const bandwidthTrendOption = computed(() => {
-  const data: [number, number][] = bandwidthRates.value.map(r => [r.time, r.rate])
+  const inboundData: [number, number][] = bandwidthRates.value.map(r => [r.time, r.inboundRate])
+  const outboundData: [number, number][] = bandwidthRates.value.map(r => [r.time, r.outboundRate])
   return {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
-        const p = params[0]
-        return `${new Date(p.value[0]).toLocaleTimeString()}<br/>${formatBytes(p.value[1])}/s`
+        const lines = params.map(
+          (p: any) =>
+            `<span style="color:${p.color}">●</span> ${p.seriesName}: ${formatBytes(p.value[1])}/s`
+        )
+        return `${new Date(params[0].value[0]).toLocaleTimeString()}<br/>${lines.join('<br/>')}`
       }
     },
-    grid: { left: 8, right: 8, top: 14, bottom: 8 },
+    legend: {
+      show: true,
+      bottom: 0,
+      itemWidth: 14,
+      itemHeight: 8,
+      textStyle: { color: chartTextSecondary.value, fontSize: 11 }
+    },
+    grid: { left: 8, right: 8, top: 14, bottom: 26 },
     xAxis: { type: 'time', show: false },
     yAxis: { type: 'value', show: false, min: 0 },
     series: [
       {
+        name: 'Inbound',
         type: 'line',
-        data,
+        data: inboundData,
         smooth: true,
         symbol: 'none',
         lineStyle: { width: 2, color: '#0ea5e9' },
@@ -558,6 +660,27 @@ const bandwidthTrendOption = computed(() => {
             colorStops: [
               { offset: 0, color: 'rgba(14, 165, 233, 0.35)' },
               { offset: 1, color: 'rgba(14, 165, 233, 0)' }
+            ]
+          }
+        }
+      },
+      {
+        name: 'Outbound',
+        type: 'line',
+        data: outboundData,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2, color: '#8b5cf6' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(139, 92, 246, 0.3)' },
+              { offset: 1, color: 'rgba(139, 92, 246, 0)' }
             ]
           }
         }
@@ -609,6 +732,7 @@ const autoRefreshCtrl = useAutoRefresh(
 let protocolTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
+  clearStaleSamples()
   refreshData().catch(() => {})
   protocolTimer = setInterval(() => {
     if (document.hidden) return
@@ -899,6 +1023,23 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: var(--el-text-color-primary);
   font-variant-numeric: tabular-nums;
+}
+
+.rate-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: baseline;
+}
+
+.rate-in {
+  background: #0ea5e9;
+}
+
+.rate-out {
+  background: #8b5cf6;
 }
 
 /* Tinted panel icon chips (light + dark variants) */

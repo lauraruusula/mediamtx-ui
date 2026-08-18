@@ -72,6 +72,11 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="Health" width="120">
+          <template #default="{ row }">
+            <HealthBadge :info="pathHealth(row)" />
+          </template>
+        </el-table-column>
         <el-table-column label="Source Type" width="130">
           <template #default="{ row }">
             {{ row.source ? formatSourceType(row.source.type) : '-' }}
@@ -191,12 +196,38 @@
         <el-descriptions-item label="Source Type">
           {{ currentPath.source ? formatSourceType(currentPath.source.type) : 'None' }}
         </el-descriptions-item>
+        <el-descriptions-item label="Health">
+          <HealthBadge :info="pathHealth(currentPath)" />
+        </el-descriptions-item>
+        <el-descriptions-item v-if="currentPath.online" label="Online Since">
+          {{ formatDate(currentPath.onlineTime) }}
+        </el-descriptions-item>
+        <el-descriptions-item
+          v-if="!currentPath.online && currentPath.available"
+          label="Available Since"
+        >
+          {{ formatDate(currentPath.availableTime) }}
+        </el-descriptions-item>
+        <el-descriptions-item
+          v-if="(currentPath.inboundFramesInError || 0) > 0"
+          label="Frame Errors"
+        >
+          <span class="danger-text">{{ currentPath.inboundFramesInError }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="Inbound Traffic">{{
           formatBytes(currentPath.inboundBytes || 0)
         }}</el-descriptions-item>
         <el-descriptions-item label="Outbound Traffic">{{
           formatBytes(currentPath.outboundBytes || 0)
         }}</el-descriptions-item>
+        <el-descriptions-item v-if="currentSparkline.length > 1" label="Traffic">
+          <PathSparkline
+            :points="currentSparkline"
+            :width="180"
+            :height="36"
+            title="Traffic over recent refreshes"
+          />
+        </el-descriptions-item>
       </el-descriptions>
 
       <template v-if="currentPath">
@@ -224,9 +255,12 @@
 
       <template v-if="currentPath?.tracks2?.length">
         <h4 style="margin: 16px 0 8px">Tracks</h4>
-        <el-tag v-for="(t, i) in currentPath.tracks2" :key="i" style="margin: 0 4px 4px 0">{{
-          trackLabel(t)
-        }}</el-tag>
+        <div class="track-list">
+          <div v-for="(t, i) in currentPath.tracks2" :key="i" class="track-row">
+            <el-tag size="small">{{ t.codec }}</el-tag>
+            <span class="track-detail">{{ trackDetail(t) }}</span>
+          </div>
+        </div>
       </template>
       <template v-if="currentPath?.readers?.length">
         <h4 style="margin: 16px 0 8px">Readers</h4>
@@ -276,13 +310,16 @@ import {
   type StreamUrlConfig
 } from '@/composables/useStreamUrls'
 import { copyToClipboard } from '@/composables/useClipboard'
-import { formatBytes, formatSourceType } from '@/composables/useFormatters'
+import { formatBytes, formatSourceType, formatDate } from '@/composables/useFormatters'
+import { pathHealth } from '@/composables/useStreamHealth'
 import { toast } from '@/composables/useToast'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { Refresh, Search, Download, DocumentCopy, VideoPlay, View } from '@element-plus/icons-vue'
 import StreamPlayer from '@/components/StreamPlayer.vue'
 import CopyLinkButton from '@/components/CopyLinkButton.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
+import HealthBadge from '@/components/HealthBadge.vue'
+import PathSparkline from '@/components/PathSparkline.vue'
 import type { APIPath, APIPathTrack } from '@/types/api'
 
 const store = usePathsStore()
@@ -298,7 +335,7 @@ const currentPath = ref<APIPath | null>(null)
 const refreshingPath = ref(false)
 const playerVisible = ref(false)
 const playingPath = ref('')
-const streamCfg = ref<StreamUrlConfig>({ ports: {}, enabled: {} })
+const streamCfg = ref<StreamUrlConfig>({ ports: {}, enabled: {}, encryption: {} })
 const portsLoaded = ref(false)
 // The loading mask is only meaningful while the table has nothing to render —
 // showing it on every auto-refresh tick makes the panel flash. Once the first
@@ -354,7 +391,8 @@ const streamUrls = computed(() =>
         currentPath.value.name,
         streamCfg.value.ports,
         streamCfg.value.enabled,
-        httpScheme
+        httpScheme,
+        streamCfg.value.encryption
       )
     : []
 )
@@ -368,19 +406,49 @@ const copyUrl = async (u: StreamUrl) => {
   }
 }
 
-const trackLabel = (t: APIPathTrack) => {
-  const bitrate = (t.codecProps as Record<string, unknown>)?.bitrate
-  const bitrateNum = typeof bitrate === 'number' ? bitrate : undefined
-  return bitrateNum ? `${t.codec} · ${formatBytes(bitrateNum)}/s` : t.codec
+// Per-path traffic samples collected while the detail drawer is open, rendered
+// as a small sparkline. Auto refresh (or manual refreshes) feed new samples.
+const MAX_SPARKLINE_SAMPLES = 60
+const pathTrafficHistory = ref<Record<string, number[]>>({})
+
+const currentSparkline = computed(() =>
+  currentPath.value ? pathTrafficHistory.value[currentPath.value.name] || [] : []
+)
+
+const sampleCurrentPath = () => {
+  const name = currentPath.value?.name
+  if (!drawerVisible.value || !name) return
+  const p = store.list.find(x => x.name === name)
+  if (!p) return
+  const history = pathTrafficHistory.value[name] || []
+  history.push((p.inboundBytes || 0) + (p.outboundBytes || 0))
+  if (history.length > MAX_SPARKLINE_SAMPLES) history.shift()
+  pathTrafficHistory.value[name] = history
+}
+
+const trackDetail = (t: APIPathTrack): string => {
+  const props = (t.codecProps || {}) as Record<string, unknown>
+  const parts: string[] = []
+  // MediaMTX reports codec bitrate in bits per second — show it as Mbps
+  // instead of passing it through formatBytes (which treats input as bytes).
+  if (typeof props.bitrate === 'number') parts.push(`${(props.bitrate / 1e6).toFixed(2)} Mbps`)
+  if (typeof props.width === 'number' && typeof props.height === 'number') {
+    parts.push(`${props.width}×${props.height}`)
+  }
+  if (typeof props.fps === 'number') parts.push(`${props.fps} fps`)
+  if (typeof props.channels === 'number') parts.push(`${props.channels} ch`)
+  if (typeof props.sampleRate === 'number') parts.push(`${props.sampleRate} Hz`)
+  return parts.join(' · ')
 }
 
 const exportCsvData = () => {
   exportCsv(
     `paths-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Path Name', 'Status', 'Source Type', 'Tracks', 'Readers', 'Inbound', 'Outbound'],
+    ['Path Name', 'Status', 'Health', 'Source Type', 'Tracks', 'Readers', 'Inbound', 'Outbound'],
     filteredList.value.map(p => [
       p.name,
       p.online ? 'Online' : p.available ? 'Available' : 'Offline',
+      pathHealth(p).label,
       p.source ? formatSourceType(p.source.type) : '-',
       p.tracks2?.length || 0,
       p.readers?.length || 0,
@@ -400,6 +468,7 @@ const refreshPath = async () => {
   refreshingPath.value = true
   try {
     currentPath.value = await store.fetchOne(currentPath.value.name)
+    sampleCurrentPath()
   } catch (err) {
     toast.error(getErrorMessage(err, 'Failed to refresh path details'))
   } finally {
@@ -436,6 +505,7 @@ const loadData = async () => {
     }
     initialLoading.value = false
     lastUpdated.markUpdated()
+    sampleCurrentPath()
   }, 'Failed to load paths')
 }
 
@@ -516,5 +586,30 @@ onMounted(() => {
   white-space: nowrap;
   font-size: 12px;
   color: var(--el-text-color-regular);
+}
+
+.danger-text {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
+.track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--el-fill-color-light);
+}
+
+.track-detail {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

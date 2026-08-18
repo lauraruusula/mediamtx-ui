@@ -44,7 +44,25 @@
 
     <el-card shadow="never">
       <el-table v-loading="initialLoading" :data="filteredList" style="width: 100%">
-        <el-table-column prop="name" label="Path Name" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="name" label="Path Name" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <router-link class="cell-link" :to="{ path: '/paths', query: { q: row.name } }">
+              {{ row.name }}
+            </router-link>
+          </template>
+        </el-table-column>
+        <el-table-column label="Live" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag
+              v-if="liveState.has(row.name)"
+              :type="liveState.get(row.name) ? 'success' : 'info'"
+              size="small"
+            >
+              {{ liveState.get(row.name) ? 'Online' : 'Offline' }}
+            </el-tag>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Source" min-width="220">
           <template #default="{ row }">
             <span>{{ row.source || '-' }}</span>
@@ -140,167 +158,13 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? 'Edit Path Config' : 'Add Path Config'"
-      width="600px"
+      width="640px"
+      @closed="onDialogClosed"
     >
-      <el-tabs v-model="activeTab">
-        <el-tab-pane label="Source" name="source">
-          <el-form :model="form" label-width="140px">
-            <el-form-item label="Path Name" required>
-              <el-input v-model="form.name" :disabled="isEdit" placeholder="e.g. mystream" />
-            </el-form-item>
-            <el-form-item label="Source">
-              <el-input
-                v-model="form.source"
-                placeholder="e.g. rtsp://... (leave empty to publish directly)"
-              />
-            </el-form-item>
-            <el-form-item label="On demand">
-              <el-switch v-model="form.sourceOnDemand" />
-              <span class="form-hint"
-                >Only connect to the source when a reader requests the stream</span
-              >
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
-        <el-tab-pane label="Authentication" name="auth">
-          <el-form :model="form" label-width="140px">
-            <el-form-item label="Publish User">
-              <el-input
-                v-model="form.publishUser"
-                placeholder="Leave empty to allow anyone to publish"
-              />
-            </el-form-item>
-            <el-form-item label="Publish Password">
-              <el-input v-model="form.publishPass" type="password" show-password />
-            </el-form-item>
-            <el-form-item label="Read User">
-              <el-input v-model="form.readUser" placeholder="Leave empty to allow anyone to read" />
-            </el-form-item>
-            <el-form-item label="Read Password">
-              <el-input v-model="form.readPass" type="password" show-password />
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
-        <el-tab-pane label="Recording" name="record">
-          <el-form :model="form" label-width="140px">
-            <el-form-item label="Enable Recording">
-              <el-switch v-model="form.record" />
-            </el-form-item>
-            <el-form-item v-if="form.record" label="Recording Path">
-              <el-input
-                v-model="form.recordPath"
-                placeholder="Leave empty to use the global default"
-              />
-            </el-form-item>
-            <el-form-item v-if="form.record" label="Recording Format">
-              <el-select v-model="form.recordFormat" style="width: 100%">
-                <el-option label="FMP4" value="fmp4" />
-                <el-option label="MPEGTS" value="mpegts" />
-              </el-select>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
-        <el-tab-pane label="Hooks" name="hooks">
-          <el-form :model="form" label-width="140px">
-            <el-form-item label="Run on Ready">
-              <el-input
-                v-model="form.runOnReady"
-                type="textarea"
-                :rows="2"
-                placeholder="Shell command to run when the stream becomes ready"
-              />
-              <span class="form-hint"
-                >Runs with the MediaMTX server's OS privileges — only use trusted commands</span
-              >
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
-        <el-tab-pane label="Advanced" name="advanced">
-          <el-form :model="form" label-width="140px">
-            <el-form-item label="Run on Demand">
-              <el-input
-                v-model="form.runOnDemand"
-                type="textarea"
-                :rows="2"
-                placeholder="Shell command to run when a reader requests this path"
-              />
-              <span class="form-hint"
-                >Runs with the MediaMTX server's OS privileges — only use trusted commands</span
-              >
-            </el-form-item>
-            <el-form-item label="Run on Not Ready">
-              <el-input
-                v-model="form.runOnNotReady"
-                type="textarea"
-                :rows="2"
-                placeholder="Shell command to run when the stream goes down"
-              />
-            </el-form-item>
-            <el-form-item label="Run on Read">
-              <el-input
-                v-model="form.runOnRead"
-                type="textarea"
-                :rows="2"
-                placeholder="Shell command to run when a reader starts"
-              />
-            </el-form-item>
-            <el-form-item label="Run on Unread">
-              <el-input
-                v-model="form.runOnUnread"
-                type="textarea"
-                :rows="2"
-                placeholder="Shell command to run when the last reader disconnects"
-              />
-            </el-form-item>
-            <el-form-item label="Publish IPs">
-              <el-input
-                v-model="publishIPsText"
-                placeholder="Comma-separated IPs, e.g. 192.168.1.0/24, 203.0.113.5"
-              />
-              <span class="form-hint"
-                >Restrict which IPs may publish to this path. Leave empty to allow all.</span
-              >
-            </el-form-item>
-            <el-form-item label="Read IPs">
-              <el-input
-                v-model="readIPsText"
-                placeholder="Comma-separated IPs, e.g. 192.168.1.0/24"
-              />
-              <span class="form-hint"
-                >Restrict which IPs may read this path. Leave empty to allow all.</span
-              >
-            </el-form-item>
-            <el-form-item label="Override Publish">
-              <el-select v-model="form.overridePublish" style="width: 100%">
-                <el-option label="Default (None)" value="none" />
-                <el-option label="Allow" value="allow" />
-                <el-option label="Deny" value="deny" />
-              </el-select>
-              <span class="form-hint">Overrides the global publish permission for this path</span>
-            </el-form-item>
-            <el-form-item label="Record Segment Duration">
-              <el-input
-                v-model="form.recordSegmentDuration"
-                placeholder="e.g. 6s (overrides the global default)"
-              />
-            </el-form-item>
-            <el-form-item label="Record Part Duration">
-              <el-input
-                v-model="form.recordPartDuration"
-                placeholder="e.g. 1s (overrides the global default)"
-              />
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-      </el-tabs>
-
+      <PathConfForm :form="form" :name-disabled="isEdit" />
       <template #footer>
         <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="handleSave">Save</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">Save</el-button>
       </template>
     </el-dialog>
   </div>
@@ -309,6 +173,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { usePathsConfigStore } from '@/stores/pathsConfig'
+import { usePathsStore } from '@/stores/paths'
 import { useActivityStore } from '@/stores/activity'
 import { usePagination } from '@/composables/usePagination'
 import {
@@ -322,6 +187,8 @@ import { useListError } from '@/composables/useListError'
 import { exportCsv } from '@/composables/useCsvExport'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { toast } from '@/composables/useToast'
+import { emptyPathConfForm, fillPathConfForm, pathConfPayload } from '@/composables/usePathConfForm'
+import type { PathConfForm as PathConfFormModel } from '@/composables/usePathConfForm'
 import {
   Refresh,
   Search,
@@ -332,12 +199,14 @@ import {
   CopyDocument
 } from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
+import PathConfForm from '@/components/PathConfForm.vue'
 
 const store = usePathsConfigStore()
+const pathsStore = usePathsStore()
 const activityStore = useActivityStore()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const activeTab = ref('source')
+const saving = ref(false)
 const search = ref('')
 // The loading mask is only meaningful while the table has nothing to render —
 // showing it on every auto-refresh tick makes the panel flash. Once the first
@@ -355,97 +224,21 @@ const displayedCount = computed(() =>
   search.value.trim() ? filteredList.value.length : store.itemCount
 )
 
-const emptyForm = () => ({
-  name: '',
-  source: '',
-  sourceOnDemand: false,
-  publishUser: '',
-  publishPass: '',
-  readUser: '',
-  readPass: '',
-  record: false,
-  recordPath: '',
-  recordFormat: 'fmp4',
-  runOnReady: '',
-  runOnDemand: '',
-  runOnNotReady: '',
-  runOnRead: '',
-  runOnUnread: '',
-  publishIPs: [] as string[],
-  readIPs: [] as string[],
-  overridePublish: 'none',
-  recordSegmentDuration: '',
-  recordPartDuration: ''
-})
+// Live online/offline state, cross-linked from the Path Status store so admins
+// can see at a glance whether a configured path is currently being served.
+const liveState = computed(() => new Map(pathsStore.list.map(p => [p.name, !!p.online])))
 
-const form = reactive(emptyForm())
-
-// publishIPs / readIPs are arrays in the API config; the form edits them as
-// comma-separated text.
-const splitIPs = (v: string) =>
-  v
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-
-const publishIPsText = computed({
-  get: () => (form.publishIPs || []).join(', '),
-  set: (v: string) => {
-    form.publishIPs = splitIPs(v)
-  }
-})
-
-const readIPsText = computed({
-  get: () => (form.readIPs || []).join(', '),
-  set: (v: string) => {
-    form.readIPs = splitIPs(v)
-  }
-})
+const form = reactive<PathConfFormModel>(emptyPathConfForm())
 
 const showAddDialog = () => {
   isEdit.value = false
-  activeTab.value = 'source'
-  Object.assign(form, emptyForm())
+  Object.assign(form, emptyPathConfForm())
   dialogVisible.value = true
-}
-
-const fillFormFromRow = (row: any) => {
-  Object.assign(form, emptyForm(), {
-    name: row.name || '',
-    source: row.source || '',
-    sourceOnDemand: !!row.sourceOnDemand,
-    publishUser: row.publishUser || '',
-    publishPass: row.publishPass || '',
-    readUser: row.readUser || '',
-    readPass: row.readPass || '',
-    record: !!row.record,
-    recordPath: row.recordPath || '',
-    recordFormat: row.recordFormat || 'fmp4',
-    runOnReady: row.runOnReady || '',
-    runOnDemand: row.runOnDemand || '',
-    runOnNotReady: row.runOnNotReady || '',
-    runOnRead: row.runOnRead || '',
-    runOnUnread: row.runOnUnread || '',
-    publishIPs: Array.isArray(row.publishIPs)
-      ? row.publishIPs
-      : row.publishIPs
-        ? String(row.publishIPs).split(',')
-        : [],
-    readIPs: Array.isArray(row.readIPs)
-      ? row.readIPs
-      : row.readIPs
-        ? String(row.readIPs).split(',')
-        : [],
-    overridePublish: row.overridePublish || 'none',
-    recordSegmentDuration: row.recordSegmentDuration || '',
-    recordPartDuration: row.recordPartDuration || ''
-  })
 }
 
 const showEditDialog = (row: any) => {
   isEdit.value = true
-  activeTab.value = 'source'
-  fillFormFromRow(row)
+  fillPathConfForm(form, row)
   dialogVisible.value = true
 }
 
@@ -453,10 +246,13 @@ const showCloneDialog = (row: any) => {
   // Prefill everything from the source path but blank the name, so saving
   // creates a new path config instead of overwriting the original.
   isEdit.value = false
-  activeTab.value = 'source'
-  fillFormFromRow(row)
+  fillPathConfForm(form, row)
   form.name = ''
   dialogVisible.value = true
+}
+
+const onDialogClosed = () => {
+  Object.assign(form, emptyPathConfForm())
 }
 
 const handleSave = async () => {
@@ -464,35 +260,24 @@ const handleSave = async () => {
     toast.warning('Please enter a path name')
     return
   }
+  saving.value = true
   try {
-    const { name, ...rest } = form
-    // MediaMTX copies every PATCHed field verbatim, so an empty string is what
-    // clears a field back to its default (empty publishUser = no auth, empty
-    // runOnReady = no hook, empty IP list = allow all). The one exception is
-    // `source`: MediaMTX rejects an empty string there, so an empty source is
-    // sent as the literal default value "publisher" (publish directly).
-    const data: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(rest)) {
-      if (value === null || value === undefined) continue
-      if (key === 'source' && value === '') {
-        data[key] = 'publisher'
-      } else {
-        data[key] = value
-      }
-    }
+    const data = pathConfPayload(form)
     if (isEdit.value) {
-      await store.patch(name, data)
+      await store.patch(form.name, data)
     } else {
-      await store.add(name, data)
+      await store.add(form.name, data)
     }
     // Reload from the page the user is actually on — the store actions no
     // longer re-fetch, so pagination isn't silently reset to page 1.
     await loadData()
-    toast.success(`Path config "${name}" saved`)
-    activityStore.log(`${isEdit.value ? 'Updated' : 'Added'} path config "${name}"`, 'success')
+    toast.success(`Path config "${form.name}" saved`)
+    activityStore.log(`${isEdit.value ? 'Updated' : 'Added'} path config "${form.name}"`, 'success')
     dialogVisible.value = false
   } catch (err) {
     toast.error(getErrorMessage(err, 'Failed to save path config'))
+  } finally {
+    saving.value = false
   }
 }
 
@@ -530,9 +315,10 @@ const loadData = async () => {
 const exportCsvData = () => {
   exportCsv(
     `path-configs-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Path Name', 'Source', 'On Demand', 'Protected', 'Recording'],
+    ['Path Name', 'Live', 'Source', 'On Demand', 'Protected', 'Recording'],
     filteredList.value.map((r: any) => [
       r.name,
+      liveState.value.has(r.name) ? (liveState.value.get(r.name) ? 'Online' : 'Offline') : '—',
       r.source || '',
       r.sourceOnDemand ? 'Yes' : 'No',
       r.publishUser || r.readUser ? 'Yes' : 'No',
@@ -549,14 +335,8 @@ const autoRefreshCtrl = useAutoRefresh(
 )
 onMounted(() => {
   loadData()
+  // Fetch the live path list too (guarded — /v3/paths/list can 404 before the
+  // API is fully up), so the Online/Offline column has something to render.
+  pathsStore.fetchList(0, 1000).catch(() => {})
 })
 </script>
-
-<style scoped>
-.form-hint {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-</style>

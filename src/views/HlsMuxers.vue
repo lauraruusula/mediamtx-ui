@@ -55,6 +55,11 @@
           <el-table-column label="Path" min-width="200" show-overflow-tooltip>
             <template #default="{ row }"><PathLink :path="row.path" /></template>
           </el-table-column>
+          <el-table-column label="Health" width="120">
+            <template #default="{ row }">
+              <HealthBadge :info="discardedFramesHealth(row.outboundFramesDiscarded)" />
+            </template>
+          </el-table-column>
           <el-table-column label="Outbound Traffic" width="180" sortable prop="outboundBytes">
             <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
           </el-table-column>
@@ -127,10 +132,12 @@ import { useListError } from '@/composables/useListError'
 import { useTableSort } from '@/composables/useTableSort'
 import { exportCsv } from '@/composables/useCsvExport'
 import { formatBytes, formatDate } from '@/composables/useFormatters'
+import { discardedFramesHealth } from '@/composables/useStreamHealth'
 import { Refresh, Search, Download } from '@element-plus/icons-vue'
 import PathLink from '@/components/PathLink.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import ProtocolDisabled from '@/components/ProtocolDisabled.vue'
+import HealthBadge from '@/components/HealthBadge.vue'
 import type { APIHLSMuxer } from '@/types/api'
 
 const store = useHlsMuxerStore()
@@ -180,9 +187,10 @@ useSearchableList(search, () => loadData())
 const exportCsvData = () => {
   exportCsv(
     `hls-muxers-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Path', 'Outbound Traffic', 'Dropped Frames', 'Created', 'Last Request'],
+    ['Path', 'Health', 'Outbound Traffic', 'Dropped Frames', 'Created', 'Last Request'],
     filteredList.value.map(m => [
       m.path || '',
+      discardedFramesHealth(m.outboundFramesDiscarded).label,
       m.outboundBytes || 0,
       m.outboundFramesDiscarded || 0,
       formatDate(m.created),

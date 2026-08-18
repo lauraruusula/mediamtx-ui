@@ -34,6 +34,11 @@ export const useSystemStore = defineStore('system', () => {
   const connected = ref(false)
 
   const onlinePaths = computed(() => paths.value.filter(p => p.online))
+  // Paths whose source is reporting frame errors — a leading indicator that
+  // something is degrading even while the stream stays up.
+  const pathsWithErrors = computed(
+    () => paths.value.filter(p => p.online && (p.inboundFramesInError || 0) > 0).length
+  )
   const totalReaders = computed(() =>
     paths.value.reduce((sum, p) => sum + (p.readers?.length || 0), 0)
   )
@@ -117,6 +122,7 @@ export const useSystemStore = defineStore('system', () => {
     loading,
     connected,
     onlinePaths,
+    pathsWithErrors,
     totalReaders,
     totalInboundBytes,
     totalOutboundBytes,

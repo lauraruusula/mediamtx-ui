@@ -76,6 +76,23 @@
           >
             <template #default="{ row }">{{ formatDate(row.created) }}</template>
           </el-table-column>
+          <el-table-column label="Actions" width="90" fixed="right">
+            <template #default="{ row }">
+              <div class="row-actions">
+                <el-tooltip content="View details" placement="top">
+                  <el-button
+                    :icon="View"
+                    circle
+                    size="small"
+                    type="primary"
+                    plain
+                    aria-label="View details"
+                    @click="openDetail(row as APIRTSPConn)"
+                  />
+                </el-tooltip>
+              </div>
+            </template>
+          </el-table-column>
         </el-table>
         <el-empty
           v-if="!error && !initialLoading && filteredList.length === 0"
@@ -95,6 +112,14 @@
         </div>
       </el-card>
     </template>
+
+    <SessionDetailDrawer
+      v-model="detailVisible"
+      :title="current ? `RTSP Connection ${current.id.slice(0, 8)}…` : ''"
+      :rows="detailRows"
+      :refreshing="refreshingDetail"
+      @refresh="refreshDetail"
+    />
   </div>
 </template>
 
@@ -114,9 +139,10 @@ import { useListError } from '@/composables/useListError'
 import { useTableSort } from '@/composables/useTableSort'
 import { exportCsv } from '@/composables/useCsvExport'
 import { formatBytes, formatDate } from '@/composables/useFormatters'
-import { Refresh, Search, Download } from '@element-plus/icons-vue'
+import { Refresh, Search, Download, View } from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import ProtocolDisabled from '@/components/ProtocolDisabled.vue'
+import SessionDetailDrawer, { type DetailRow } from '@/components/SessionDetailDrawer.vue'
 import type { APIRTSPConn } from '@/types/api'
 
 const store = useRtspConnStore()
@@ -148,6 +174,41 @@ const displayedCount = computed(() =>
   search.value.trim() ? filteredList.value.length : store.itemCount
 )
 
+const detailVisible = ref(false)
+const current = ref<APIRTSPConn | null>(null)
+const refreshingDetail = ref(false)
+
+const detailRows = computed<DetailRow[]>(() => {
+  const c = current.value
+  if (!c) return []
+  return [
+    { label: 'ID', value: c.id },
+    { label: 'Remote Address', value: c.remoteAddr || '—' },
+    { label: 'Tunnel', value: c.tunnel || '—' },
+    { label: 'Session', value: c.session || '—' },
+    { label: 'Inbound Traffic', value: formatBytes(c.inboundBytes || 0) },
+    { label: 'Outbound Traffic', value: formatBytes(c.outboundBytes || 0) },
+    { label: 'Created', value: formatDate(c.created) }
+  ]
+})
+
+const openDetail = (row: APIRTSPConn) => {
+  current.value = row
+  detailVisible.value = true
+}
+
+const refreshDetail = async () => {
+  if (!current.value) return
+  refreshingDetail.value = true
+  try {
+    await loadData()
+    const fresh = store.list.find(c => c.id === current.value!.id)
+    if (fresh) current.value = fresh
+  } finally {
+    refreshingDetail.value = false
+  }
+}
+
 const loadData = async () => {
   if (!(await guard())) return
   await run(async () => {
@@ -166,11 +227,12 @@ useSearchableList(search, () => loadData())
 const exportCsvData = () => {
   exportCsv(
     `rtsp-connections-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['ID', 'Remote Address', 'Tunnel', 'Inbound', 'Outbound', 'Created'],
+    ['ID', 'Remote Address', 'Tunnel', 'Session', 'Inbound', 'Outbound', 'Created'],
     filteredList.value.map(c => [
       c.id,
       c.remoteAddr || '',
       c.tunnel || '',
+      c.session || '',
       c.inboundBytes || 0,
       c.outboundBytes || 0,
       formatDate(c.created)

@@ -17,12 +17,21 @@ const DEFAULT_PORTS: Record<StreamProtocol, number> = {
   srt: 8890
 }
 
-export type StreamUrlPorts = Partial<Record<StreamProtocol, number>>
+// RTSPS uses a distinct default port; RTMPS shares RTMP's port (the listener
+// serves both, switching on the handshake).
+const DEFAULT_ENCRYPTED_PORTS: Record<'rtsps' | 'rtmps', number> = {
+  rtsps: 8322,
+  rtmps: 1935
+}
+
+export type StreamUrlPorts = Partial<Record<StreamProtocol | 'rtsps' | 'rtmps', number>>
 export type StreamUrlEnabled = Partial<Record<StreamProtocol, boolean>>
+export type StreamEncryption = Partial<Record<StreamProtocol, 'no' | 'optional' | 'strict'>>
 
 export interface StreamUrlConfig {
   ports: StreamUrlPorts
   enabled: StreamUrlEnabled
+  encryption: StreamEncryption
 }
 
 const PROTOCOL_ADDRESS_KEY: Record<StreamProtocol, string> = {
@@ -31,6 +40,18 @@ const PROTOCOL_ADDRESS_KEY: Record<StreamProtocol, string> = {
   hls: 'hlsAddress',
   webrtc: 'webrtcAddress',
   srt: 'srtAddress'
+}
+
+const ENCRYPTED_ADDRESS_KEY: Partial<Record<'rtsps' | 'rtmps', string>> = {
+  rtsps: 'rtspsAddress',
+  rtmps: 'rtmpsAddress'
+}
+
+// Which protocol each encryption flag applies to. HLS/WebRTC use their own
+// (boolean) encryption toggles and never touch these string values.
+const ENCRYPTION_FLAG: Partial<Record<StreamProtocol, string>> = {
+  rtsp: 'rtspEncryption',
+  rtmp: 'rtmpEncryption'
 }
 
 // MediaMTX addresses look like ":8554" or "0.0.0.0:8554" (and may carry a
@@ -50,20 +71,37 @@ const portOf = (address: string | undefined): number | undefined => {
 export function streamConfigFromConfig(config: Record<string, any>): StreamUrlConfig {
   const ports: StreamUrlPorts = {}
   const enabled: StreamUrlEnabled = {}
+  const encryption: StreamEncryption = {}
   for (const protocol of Object.keys(PROTOCOL_ADDRESS_KEY) as StreamProtocol[]) {
     const port = portOf(config[PROTOCOL_ADDRESS_KEY[protocol]])
     if (port) ports[protocol] = port
     const flag = config[protocol]
     if (flag !== undefined) enabled[protocol] = flag === true
+    const enc = config[ENCRYPTION_FLAG[protocol]!]
+    if (enc === 'no' || enc === 'optional' || enc === 'strict') {
+      encryption[protocol] = enc
+    }
   }
-  return { ports, enabled }
+  for (const [key, addressKey] of Object.entries(ENCRYPTED_ADDRESS_KEY)) {
+    const port = portOf(config[addressKey])
+    if (port) ports[key as 'rtsps' | 'rtmps'] = port
+  }
+  return { ports, enabled, encryption }
 }
+
+// When a protocol is set to enforce or allow TLS, advertise the encrypted
+// variant (RTSPS/RTMPS) so copied links actually work against a strict server.
+const rtspScheme = (encryption: StreamEncryption) =>
+  encryption.rtsp && encryption.rtsp !== 'no' ? 'rtsps' : 'rtsp'
+const rtmpScheme = (encryption: StreamEncryption) =>
+  encryption.rtmp && encryption.rtmp !== 'no' ? 'rtmps' : 'rtmp'
 
 export function buildStreamUrls(
   pathName: string,
   ports: StreamUrlPorts = {},
   enabled: StreamUrlEnabled = {},
-  httpScheme: 'http' | 'https' = 'http'
+  httpScheme: 'http' | 'https' = 'http',
+  encryption: StreamEncryption = {}
 ): StreamUrl[] {
   if (!pathName) return []
 
@@ -73,10 +111,23 @@ export function buildStreamUrls(
   const p = pathName.split('/').map(encodeURIComponent).join('/')
 
   const port = (protocol: StreamProtocol) => ports[protocol] ?? DEFAULT_PORTS[protocol]
+  const rtspsPort = ports.rtsps ?? DEFAULT_ENCRYPTED_PORTS.rtsps
+  const rtmpsPort = ports.rtmps ?? ports.rtmp ?? DEFAULT_ENCRYPTED_PORTS.rtmps
+
+  const isRtsps = rtspScheme(encryption) === 'rtsps'
+  const isRtmps = rtmpScheme(encryption) === 'rtmps'
 
   const urls: Record<StreamProtocol, StreamUrl> = {
-    rtsp: { protocol: 'rtsp', label: 'RTSP', url: `rtsp://${host}:${port('rtsp')}/${p}` },
-    rtmp: { protocol: 'rtmp', label: 'RTMP', url: `rtmp://${host}:${port('rtmp')}/${p}` },
+    rtsp: {
+      protocol: 'rtsp',
+      label: isRtsps ? 'RTSPS' : 'RTSP',
+      url: `${isRtsps ? 'rtsps' : 'rtsp'}://${host}:${isRtsps ? rtspsPort : port('rtsp')}/${p}`
+    },
+    rtmp: {
+      protocol: 'rtmp',
+      label: isRtmps ? 'RTMPS' : 'RTMP',
+      url: `${isRtmps ? 'rtmps' : 'rtmp'}://${host}:${isRtmps ? rtmpsPort : port('rtmp')}/${p}`
+    },
     hls: {
       protocol: 'hls',
       label: 'HLS',

@@ -14,6 +14,15 @@ import { useConfigStore } from './stores/config'
 import { useRoute, useRouter } from 'vue-router'
 import { formatUptime, formatRelativeTime, formatVersion } from './composables/useFormatters'
 import { getPaths } from './api/system'
+import {
+  notificationsEnabled,
+  setNotificationsEnabled,
+  requestNotificationPermission,
+  notificationPermission,
+  notifyPathTransitions,
+  reseedPathBaseline
+} from './composables/usePathNotifications'
+import { toast } from './composables/useToast'
 import CommandPalette from './components/CommandPalette.vue'
 import UptimeText from './components/UptimeText.vue'
 import {
@@ -30,6 +39,7 @@ import {
   Promotion,
   Folder,
   Bell,
+  BellFilled,
   Sunny,
   Moon,
   Search,
@@ -46,6 +56,29 @@ const activityStore = useActivityStore()
 const configStore = useConfigStore()
 const appVersion = __APP_VERSION__
 const paletteVisible = ref(false)
+const notifyEnabled = ref(notificationsEnabled())
+
+const toggleNotifications = async () => {
+  const enabling = !notifyEnabled.value
+  if (enabling) {
+    const granted = await requestNotificationPermission()
+    if (!granted) {
+      toast.error('Notifications are blocked by the browser. Allow them in site settings.')
+      return
+    }
+    setNotificationsEnabled(true)
+    notifyEnabled.value = true
+    toast.success('Path notifications enabled')
+  } else {
+    setNotificationsEnabled(false)
+    notifyEnabled.value = false
+    toast.info('Path notifications disabled')
+  }
+}
+
+// Chrome 94+ dropped notifications from cross-origin iframes; show a hint in
+// the tooltip when the permission can't be granted because of context.
+const notificationsUnsupported = computed(() => notificationPermission() === 'unsupported')
 
 // Below this width the horizontal nav is replaced by a hamburger + slide-over.
 const COMPACT_BREAKPOINT = 1024
@@ -149,7 +182,8 @@ const onGlobalKeydown = (e: KeyboardEvent) => {
 // Lightweight server-alert poller: MediaMTX has no push events, so we poll the
 // paths endpoint and surface online/offline transitions in the activity bell.
 // The dashboard and Paths page already fetch path state themselves, so those
-// routes skip the duplicate request entirely.
+// routes skip the duplicate request entirely. Polling continues while the tab
+// is hidden so background notifications still work.
 let previousOnline: Record<string, boolean> = {}
 let alertTimer: ReturnType<typeof setInterval> | null = null
 // Set while we're skipping the poller on a path-centric route; the next real
@@ -172,15 +206,18 @@ const diffPathStates = (items: { name: string; online: boolean }[]) => {
     }
   }
   previousOnline = current
+  // Feed the full snapshot to the notification baseline so it detects the same
+  // transitions independently of the bell diff above.
+  notifyPathTransitions(items)
 }
 
 const reseedBaseline = (items: { name: string; online: boolean }[]) => {
   previousOnline = {}
   for (const p of items) previousOnline[p.name] = p.online
+  reseedPathBaseline(items)
 }
 
 const checkPathAlerts = async () => {
-  if (document.hidden) return
   if (route.path === '/') {
     // The dashboard polls the full path list on its own cadence — diff that.
     if (alertPaused) {
@@ -427,6 +464,26 @@ onBeforeUnmount(() => {
               <UptimeText v-if="systemStore.connected" :started="systemStore.info?.started" />
               <span v-else>Offline</span>
             </div>
+          </el-tooltip>
+
+          <el-tooltip
+            :content="
+              notificationsUnsupported
+                ? 'Notifications are unavailable in this browser context'
+                : notifyEnabled
+                  ? 'Disable path notifications'
+                  : 'Notify me when paths go online or offline'
+            "
+            placement="bottom"
+          >
+            <button
+              class="icon-btn"
+              :class="{ enabled: notifyEnabled }"
+              :aria-label="notifyEnabled ? 'Disable notifications' : 'Enable notifications'"
+              @click="toggleNotifications"
+            >
+              <el-icon><BellFilled v-if="notifyEnabled" /><Bell v-else /></el-icon>
+            </button>
           </el-tooltip>
 
           <el-popover
@@ -760,5 +817,9 @@ onBeforeUnmount(() => {
   .server-pill {
     display: none;
   }
+}
+
+.icon-btn.enabled {
+  color: var(--el-color-primary);
 }
 </style>

@@ -48,7 +48,11 @@
         :default-sort="sort.defaultSort"
         @sort-change="sort.onSortChange"
       >
-        <el-table-column prop="name" label="Recording Name" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="name" label="Recording Name" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <PathLink :path="row.name" />
+          </template>
+        </el-table-column>
         <el-table-column
           label="Segments"
           width="115"
@@ -57,6 +61,16 @@
           :sort-method="compareSegmentCount"
         >
           <template #default="{ row }">{{ row.segments?.length || 0 }}</template>
+        </el-table-column>
+        <el-table-column
+          label="Total Duration"
+          width="140"
+          sortable
+          :sort-method="compareTotalDuration"
+        >
+          <template #default="{ row }">
+            {{ formatDuration(recordingTotalDurationSeconds(row.segments || [])) }}
+          </template>
         </el-table-column>
         <el-table-column label="Actions" width="90" fixed="right">
           <template #default="{ row }">
@@ -97,15 +111,32 @@
     <el-drawer v-model="drawerVisible" size="440px">
       <template #header>
         <div class="drawer-header">
-          <span class="drawer-title">{{ currentRecording?.name }}</span>
-          <el-button
-            :icon="Refresh"
-            circle
-            size="small"
-            :loading="refreshingRecording"
-            aria-label="Refresh recording"
-            @click="refreshRecording"
-          />
+          <div class="drawer-title-wrap">
+            <span class="drawer-title">{{ currentRecording?.name }}</span>
+            <span v-if="currentRecording" class="drawer-total">
+              {{ currentRecording.segments?.length || 0 }} segments ·
+              {{ formatDuration(recordingTotalDurationSeconds(currentRecording.segments || [])) }}
+            </span>
+          </div>
+          <div class="drawer-actions">
+            <el-tooltip content="Copy full playback URL" placement="top">
+              <el-button
+                :icon="CopyDocument"
+                circle
+                size="small"
+                aria-label="Copy full playback URL"
+                @click="copyRecordingUrl"
+              />
+            </el-tooltip>
+            <el-button
+              :icon="Refresh"
+              circle
+              size="small"
+              :loading="refreshingRecording"
+              aria-label="Refresh recording"
+              @click="refreshRecording"
+            />
+          </div>
         </div>
       </template>
       <template v-if="currentRecording">
@@ -204,14 +235,8 @@
     </el-drawer>
 
     <!-- Segment playback dialog -->
-    <el-dialog v-model="playerVisible" title="Segment playback" width="720px" destroy-on-close>
-      <video
-        v-if="playingUrl"
-        controls
-        autoplay
-        :src="playingUrl"
-        style="width: 100%; border-radius: var(--radius-md); background: #000"
-      />
+    <el-dialog v-model="playerVisible" :title="playingTitle" width="720px" destroy-on-close>
+      <HlsPlayer v-if="playingUrl" :src="playingUrl" :title="playingTitle" />
       <p class="drawer-hint" style="margin-top: 10px; margin-bottom: 0">
         If playback fails, the MediaMTX playback server may not be enabled, or this segment's
         duration is unknown — try
@@ -240,12 +265,27 @@ import { useListError } from '@/composables/useListError'
 import { useTableSort } from '@/composables/useTableSort'
 import { exportCsv } from '@/composables/useCsvExport'
 import { formatDate, formatDuration } from '@/composables/useFormatters'
-import { buildPlaybackUrl } from '@/composables/useRecordingPlayback'
+import {
+  buildFullRecordingUrl,
+  buildPlaybackUrl,
+  recordingTotalDurationSeconds
+} from '@/composables/useRecordingPlayback'
 import { playbackPortFromConfig } from '@/composables/useStreamUrls'
+import { copyToClipboard } from '@/composables/useClipboard'
 import { toast } from '@/composables/useToast'
-import { Refresh, Search, View, VideoPlay, Download, Delete } from '@element-plus/icons-vue'
+import {
+  Refresh,
+  Search,
+  View,
+  VideoPlay,
+  Download,
+  Delete,
+  CopyDocument
+} from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
+import PathLink from '@/components/PathLink.vue'
+import HlsPlayer from '@/components/HlsPlayer.vue'
 import type { APIRecording } from '@/types/api'
 
 const SEG_PAGE_SIZE = 20
@@ -259,6 +299,7 @@ const currentRecording = ref<APIRecording | null>(null)
 const refreshingRecording = ref(false)
 const playerVisible = ref(false)
 const playingUrl = ref('')
+const playingTitle = ref('')
 // Playback links use the live `playbackAddress` port so they point at the real
 // server instead of a hard-coded 9996.
 const playbackPort = ref(9996)
@@ -291,6 +332,9 @@ const filteredList = computed(() =>
 // needs an explicit comparator (a `prop` alone would sort by row[undefined]).
 const compareSegmentCount = (a: APIRecording, b: APIRecording) =>
   (a.segments?.length || 0) - (b.segments?.length || 0)
+
+const compareTotalDuration = (a: APIRecording, b: APIRecording) =>
+  recordingTotalDurationSeconds(a.segments || []) - recordingTotalDurationSeconds(b.segments || [])
 
 // While searching, the badge reflects what's on screen rather than the server
 // total (the list is fetched in full and filtered client-side).
@@ -365,7 +409,27 @@ const playSegment = (start: string) => {
   const url = segmentUrl(start)
   if (!url) return
   playingUrl.value = url
+  playingTitle.value = currentRecording.value?.name
+    ? `${currentRecording.value.name} — segment ${formatDate(start)}`
+    : 'Segment playback'
   playerVisible.value = true
+}
+
+const copyRecordingUrl = async () => {
+  if (!currentRecording.value) return
+  const url = buildFullRecordingUrl(
+    currentRecording.value.name,
+    currentRecording.value.segments || [],
+    playbackPort.value
+  )
+  if (!url) {
+    toast.error('Recording has no segments yet')
+    return
+  }
+  const ok = await copyToClipboard(url)
+  if (ok) toast.success('Playback URL copied')
+  else toast.error('Failed to copy URL')
+  activityStore.log(`Copied playback URL for "${currentRecording.value.name}"`, 'info')
 }
 
 const handleDeleteSegment = async (name: string, start: string) => {
@@ -417,8 +481,12 @@ const loadData = async (force = false) => {
 const exportCsvData = () => {
   exportCsv(
     `recordings-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Recording Name', 'Segments'],
-    filteredList.value.map(r => [r.name, r.segments?.length || 0])
+    ['Recording Name', 'Segments', 'Total Duration (s)'],
+    filteredList.value.map(r => [
+      r.name,
+      r.segments?.length || 0,
+      recordingTotalDurationSeconds(r.segments || []).toFixed(1)
+    ])
   )
 }
 
@@ -451,12 +519,31 @@ onMounted(() => {
   width: 100%;
 }
 
+.drawer-title-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .drawer-title {
   font-size: 15px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.drawer-total {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .drawer-hint {
