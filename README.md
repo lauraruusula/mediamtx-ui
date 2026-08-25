@@ -5,16 +5,18 @@ A modern web admin dashboard for [MediaMTX](https://github.com/bluenviron/mediam
 ## Features
 
 - **Dashboard** — Live KPIs, source-type and protocol charts, a persistent split inbound/outbound bandwidth trend (survives reloads), server health (version/uptime), a path frame-errors health KPI, and active paths with in-browser WebRTC (WHEP) preview and copy-link; auto-refresh (on by default) with interval control and an API unreachable banner
-- **Path Status** — Search, status filter (online/available/offline), sortable columns, pagination, CSV export, health badges, and a detail drawer with per-protocol URLs (RTSP/RTMP/HLS/WebRTC/SRT from live config, respecting encryption mode), codec tracks, timestamps, and a traffic sparkline
+- **Path Status** — Search, status filter (online/available/offline), sortable columns, pagination, CSV export, health badges, a persistent per-path traffic sparkline, and a detail drawer with per-protocol URLs (RTSP/RTMP/HLS/WebRTC/SRT from live config, respecting encryption mode), codec tracks, timestamps, and a traffic sparkline
 - **Path Config** — Add/edit/duplicate/delete path configs: source & on-demand, publish/read auth, recording, run-on hooks, advanced options (IP allowlists, override publish, record durations), and a Path Defaults tab that new paths inherit; search, pagination, and CSV export
 - **Forward destinations** — Configure per-path forwarding (RTSP/RTSPS, RTMP/RTMPS, SRT, WHIP/WHIPS) from the Path Config page — TLS fingerprint and WHIP bearer-token support — and monitor live per-destination state (idle/forwarding/error), error details, outbound traffic, and creation time with auto-refresh
 - **Connections** — Searchable, sortable, paginated tables with CSV export across RTSP connections (read-only), RTSP sessions, RTMP, WebRTC, HLS muxers (read-only), and SRT; health badges and per-session detail drawers; single and bulk kick where the API supports it; path links back to Path Status
 - **Protocol awareness** — Disabled protocols are hidden from nav and the command palette; deep links show an empty state with a jump to the matching System Config tab
-- **Recordings** — Browse by path with search/sort/pagination/CSV; open a segment drawer (optional date filter) showing total duration with a copyable full playback URL; play segments in-browser via hls.js (controls, picture-in-picture, stats overlay); download or delete segments via MediaMTX playback
-- **System Config** — Edit common global settings (logging, auth, protocols, API, recording, playback) with dirty tracking, save confirmation, leave warnings, JWT JWKS refresh, and a raw JSON editor for fields the form doesn't expose
+- **Recordings** — Browse by path with search/sort/pagination/CSV; a 26-week activity heatmap with click-to-filter; open a segment drawer (optional date filter) showing total duration with a copyable full playback URL and a bulk delete for the filtered range; play segments in-browser via hls.js (controls, picture-in-picture, stats overlay); download or delete segments via MediaMTX playback
+- **System Config** — Edit common global settings (logging, auth, protocols, API, recording, playback) with dirty tracking, save confirmation, leave warnings, JWT JWKS refresh, field search that jumps straight to the setting, and a syntax-highlighted raw JSON editor for fields the form doesn't expose
 - **Stream player** — In-browser WebRTC (WHEP) playback with play/pause, picture-in-picture, and live stats
 - **Command palette** — `⌘K` / `Ctrl+K` to jump to pages or find paths and recordings by name
-- **Recent activity & notifications** — Session-scoped header log of admin actions plus path online/offline alerts, with optional opt-in desktop notifications for those transitions
+- **Keyboard shortcuts** — `g` then `p`/`r`/`c`/`h` jumps to Path Status / Recordings / System Config / Dashboard; `?` shows the reference
+- **Recent activity & notifications** — Session-scoped header log of admin actions plus path online/offline alerts and degradation alerts (inbound frame errors), with optional opt-in desktop notifications for those transitions
+- **Read-only detection** — if the API answers writes with 403, a banner appears and save/delete controls disable
 - **Theme & layout** — Light/dark theme; top navigation that becomes a mobile slide-over below 1024px
 - **Live list controls** — Auto-refresh toggles with interval (5s/15s/30s), last-updated hints, theme-aware toasts, and list error banners with retry
 - **Testing** — Vitest unit tests (48 cases) for stream URLs, recording playback, stream health, and path notifications
@@ -141,6 +143,27 @@ npm run build
 
 Output goes to `dist/`. Serve with any static file server and proxy `/api/*` to your MediaMTX Control API. Recording playback/download additionally requires MediaMTX's playback server (`playback: yes`, default port `9996`) to be reachable from the browser.
 
+### Serving with Caddy (SPA deep links)
+
+This is a client-side-routed SPA (web history mode), so the server must fall back unknown paths to `index.html` — otherwise deep links and reloads on routes like `/paths/config` return 404. The dashboard is served from `http://localhost:3001` by this Caddyfile:
+
+```
+localhost:3001 {
+	root * /absolute/path/to/mediamtx-ui/dist
+	file_server
+	try_files {path} /index.html
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:9997
+	}
+	# Optional: gate the whole UI (and API) behind basic auth.
+	# basic_auth {
+	# 	admin $2a$14$…
+	# }
+}
+```
+
+`handle_path /api/*` forwards the `/api` prefix and strips it, so the dashboard's requests to `/v3/...` reach MediaMTX's Control API. The `try_files` fallback is what makes deep links and page reloads work. For production, put the UI and API behind TLS and an auth layer (see Security notes below).
+
 ## Project Structure
 
 ```
@@ -178,6 +201,14 @@ All API calls target **MediaMTX v3 REST API** (`/v3/...`). The type definitions 
 Compatibility notes:
 
 - **MediaMTX ≥ 1.20.1** — the API redacts credentials to `<redacted>` in responses. Untouched passwords are preserved on save; forward destinations are edited through the path config's `forward` array and monitored via `/v3/paths/forward/list`.
+
+## Security & Deployment Notes
+
+- **Auth is the deployment's job.** This UI has no login; whoever can reach it controls MediaMTX (config saves, kicks, deletions). Put it behind a reverse proxy with auth (e.g. Caddy Basic auth or a forward-auth gateway) in anything but a trusted LAN.
+- **API bearer token.** If you front the MediaMTX API with auth, you can set a token once per session via `setApiToken()` (from `src/api/index.ts`); every request then carries `Authorization: Bearer <token>`. There's no login screen — wire it into your own loader or gate.
+- **CSP.** `index.html` ships a Content-Security-Policy meta tag (`script-src 'self'`, `object-src 'none'`, etc.). For clickjacking protection (`frame-ancestors`) and strict `connect-src`, set headers at the edge instead — the in-app CSP must keep `connect-src` open because playback reaches MediaMTX protocol ports directly.
+- **Credentials on screen.** MediaMTX only redacts `*Pass` fields; path `source` URLs and forward `dest` URLs that embed `user:password@` are masked for display and in CSV exports by the app. Avoid screenshotting or sharing the Path Config page with source URLs visible.
+- **Dev servers.** The Vite dev server (`host: true`) and `mediamtx-dev.yml` (`apiAllowOrigins: ['*']`) are intentionally open for LAN development — don't reuse them for production.
 
 ## Feedback
 

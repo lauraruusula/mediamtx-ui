@@ -7,6 +7,7 @@
   --font-sans:
     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
   --el-font-family: var(--font-sans);
 
   --radius-sm: 8px;
@@ -209,6 +210,28 @@ body {
   transition:
     background-color 0.25s,
     color 0.25s;
+}
+
+/* Form controls don't inherit font-family from their ancestors by default —
+   the browser applies its own control font instead — so every button and
+   input would render in a fallback face while the rest of the app uses
+   Inter. Normalize them to inherit the app font. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* Visible keyboard focus for custom interactive elements. Element Plus ships
+   its own focus styles for its components, so this covers the app's own
+   links and buttons (browsers only apply :focus-visible for keyboard input). */
+a:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible,
+[tabindex]:not([tabindex='-1']):focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

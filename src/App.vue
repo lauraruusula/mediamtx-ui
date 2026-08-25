@@ -13,17 +13,26 @@ import { useActivityStore } from './stores/activity'
 import { useConfigStore } from './stores/config'
 import { useRoute, useRouter } from 'vue-router'
 import { formatUptime, formatRelativeTime, formatVersion } from './composables/useFormatters'
-import { getPaths } from './api/system'
+import { getAllPaths } from './api/system'
 import {
   notificationsEnabled,
   setNotificationsEnabled,
   requestNotificationPermission,
   notificationPermission,
   notifyPathTransitions,
-  reseedPathBaseline
+  notifyPathHealth,
+  checkSustainedOutages,
+  offlineThreshold,
+  setOfflineThreshold,
+  reseedPathBaseline,
+  reseedPathHealth
 } from './composables/usePathNotifications'
 import { toast } from './composables/useToast'
+import { getApiAuth, onApiAuthRequired, apiReadOnly } from './api'
+import { useServersStore } from './stores/servers'
 import CommandPalette from './components/CommandPalette.vue'
+import LoginDialog from './components/LoginDialog.vue'
+import ServerProfilesDialog from './components/ServerProfilesDialog.vue'
 import UptimeText from './components/UptimeText.vue'
 import {
   VideoCamera,
@@ -40,6 +49,7 @@ import {
   Folder,
   Bell,
   BellFilled,
+  Lock,
   Sunny,
   Moon,
   Search,
@@ -54,9 +64,24 @@ const themeStore = useThemeStore()
 const systemStore = useSystemStore()
 const activityStore = useActivityStore()
 const configStore = useConfigStore()
+// Created here (root of the app) so the persisted server profile's API base
+// URL and stream host are applied before any view fetches data.
+const serversStore = useServersStore()
+const serversDialogVisible = ref(false)
 const appVersion = __APP_VERSION__
 const paletteVisible = ref(false)
 const notifyEnabled = ref(notificationsEnabled())
+const notifyOfflineThreshold = ref(offlineThreshold())
+const loginVisible = ref(false)
+// Track whether the API demanded credentials, and whether we hold any now.
+const apiAuthRequired = ref(false)
+const hasApiAuth = ref(getApiAuth() !== null)
+
+const onOfflineThresholdChange = (seconds: number) => {
+  setOfflineThreshold(seconds)
+  notifyOfflineThreshold.value = seconds
+  toast.info(seconds > 0 ? `Notified after ${seconds}s offline` : 'Offline follow-up disabled')
+}
 
 const toggleNotifications = async () => {
   const enabling = !notifyEnabled.value
@@ -77,7 +102,7 @@ const toggleNotifications = async () => {
 }
 
 // Chrome 94+ dropped notifications from cross-origin iframes; show a hint in
-// the tooltip when the permission can't be granted because of context.
+// the popover when the permission can't be granted because of context.
 const notificationsUnsupported = computed(() => notificationPermission() === 'unsupported')
 
 // Below this width the horizontal nav is replaced by a hamburger + slide-over.
@@ -167,15 +192,78 @@ const openPalette = () => {
   paletteVisible.value = true
 }
 
+const onServerCommand = (command: string) => {
+  if (command === 'manage') {
+    serversDialogVisible.value = true
+    return
+  }
+  serversStore.setActive(command)
+  toast.success(`Switched to "${serversStore.activeProfile.name}"`)
+  // The new server may have a different version, uptime and protocol config —
+  // refresh the header state and nav visibility. `reload` bypasses the config
+  // cache so protocol flags and stream-URL ports match the new server.
+  systemStore.fetchInfo().catch(() => {})
+  configStore.reload().catch(() => {})
+}
+
 const checkIsCompact = () => {
   isCompact.value = window.innerWidth < COMPACT_BREAKPOINT
   if (isCompact.value) isMobileNavOpen.value = false
+}
+
+// S10: keyboard shortcuts. `?` shows the shortcuts dialog; `g` then a key
+// jumps to a page (like editor go-to menus). Shortcuts are ignored while
+// typing in a field so they never fire mid-edit.
+const shortcutsVisible = ref(false)
+let goPending = false
+let goPendingAt = 0
+
+const isTypingTarget = (e: KeyboardEvent) => {
+  const el = e.target as HTMLElement | null
+  if (!el) return false
+  const tag = el.tagName
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    el.isContentEditable
+  )
 }
 
 const onGlobalKeydown = (e: KeyboardEvent) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
     paletteVisible.value = true
+    return
+  }
+  if (isTypingTarget(e)) return
+  // `?` — usually shift+/ — opens the shortcuts reference.
+  if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault()
+    shortcutsVisible.value = true
+    return
+  }
+  // `g` prefix: a single g on its own does nothing until the second key.
+  if (e.key.toLowerCase() === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    goPending = true
+    goPendingAt = Date.now()
+    return
+  }
+  if (goPending) {
+    const withinWindow = Date.now() - goPendingAt <= 1500
+    goPending = false
+    if (!withinWindow) return
+    const target: Record<string, string> = {
+      p: '/paths',
+      r: '/recordings',
+      c: '/config',
+      h: '/'
+    }
+    const routeTo = target[e.key.toLowerCase()]
+    if (routeTo) {
+      e.preventDefault()
+      if (route.path !== routeTo) router.push(routeTo)
+    }
   }
 }
 
@@ -191,7 +279,9 @@ let alertTimer: ReturnType<typeof setInterval> | null = null
 // that happened while the user was already watching path status.
 let alertPaused = false
 
-const diffPathStates = (items: { name: string; online: boolean }[]) => {
+type PathSnapshot = { name: string; online: boolean; inboundFramesInError?: number | null }
+
+const diffPathStates = (items: PathSnapshot[]) => {
   const current: Record<string, boolean> = {}
   for (const p of items) current[p.name] = p.online
   const names = new Set([...Object.keys(previousOnline), ...Object.keys(current)])
@@ -207,17 +297,26 @@ const diffPathStates = (items: { name: string; online: boolean }[]) => {
   }
   previousOnline = current
   // Feed the full snapshot to the notification baseline so it detects the same
-  // transitions independently of the bell diff above.
+  // transitions independently of the bell diff above. The health tracker and
+  // the sustained-outage check run on the same snapshot.
   notifyPathTransitions(items)
+  notifyPathHealth(items)
+  checkSustainedOutages(items)
 }
 
-const reseedBaseline = (items: { name: string; online: boolean }[]) => {
+const reseedBaseline = (items: PathSnapshot[]) => {
   previousOnline = {}
   for (const p of items) previousOnline[p.name] = p.online
   reseedPathBaseline(items)
+  reseedPathHealth(items)
 }
 
 const checkPathAlerts = async () => {
+  // Background polling exists to feed desktop notifications — when they're
+  // disabled, a hidden tab has no reason to keep downloading the full path
+  // list every 15s. The foreground poller still runs (the activity bell needs
+  // the transitions), and `document.hidden` throttles nothing by itself.
+  if (document.hidden && !notificationsEnabled()) return
   if (route.path === '/') {
     // The dashboard polls the full path list on its own cadence — diff that.
     if (alertPaused) {
@@ -240,15 +339,17 @@ const checkPathAlerts = async () => {
     return
   }
   try {
-    const res = (await getPaths(0, 1000)) as { items?: { name: string; online: boolean }[] }
+    // Fetch every page — the diff baseline and the notification tracker must
+    // see all paths, not just the first 1,000.
+    const res = await getAllPaths()
     // A reachable API means the server is up — restore the header status even
     // on pages that never call /info themselves.
     systemStore.connected = true
     if (alertPaused) {
       alertPaused = false
-      reseedBaseline(res.items || [])
+      reseedBaseline(res)
     } else {
-      diffPathStates(res.items || [])
+      diffPathStates(res)
     }
   } catch {
     systemStore.connected = false
@@ -278,6 +379,12 @@ onMounted(() => {
   // Needed for protocol-aware nav; safe to ignore failures (falls back to shown).
   configStore.ensureLoaded().catch(() => {})
   alertTimer = setInterval(checkPathAlerts, 15000)
+  // Any 401 from the API means authentication is required — surface the
+  // sign-in dialog once. (Only the first 401 triggers it.)
+  onApiAuthRequired(() => {
+    apiAuthRequired.value = true
+    loginVisible.value = true
+  })
 })
 
 onBeforeUnmount(() => {
@@ -448,6 +555,44 @@ onBeforeUnmount(() => {
             </button>
           </el-tooltip>
 
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            :show-timeout="80"
+            @command="onServerCommand"
+          >
+            <button
+              class="server-switcher"
+              :aria-label="`Active server: ${serversStore.activeProfile.name}`"
+            >
+              <el-icon><Monitor /></el-icon>
+              <span class="server-switcher-name">{{ serversStore.activeProfile.name }}</span>
+              <el-icon class="server-switcher-chevron"><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="profile in serversStore.profiles"
+                  :key="profile.id"
+                  :command="profile.id"
+                >
+                  <span class="server-dropdown-item">
+                    <span class="server-dropdown-label">{{ profile.name }}</span>
+                    <el-tag v-if="profile.id === serversStore.activeId" size="small" effect="plain">
+                      Active
+                    </el-tag>
+                  </span>
+                </el-dropdown-item>
+                <el-dropdown-item divided command="manage">
+                  <span class="server-dropdown-item">
+                    <el-icon><Setting /></el-icon>
+                    <span class="server-dropdown-label">Manage servers…</span>
+                  </span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+
           <el-tooltip
             v-if="systemStore.info"
             :content="
@@ -467,24 +612,57 @@ onBeforeUnmount(() => {
           </el-tooltip>
 
           <el-tooltip
-            :content="
-              notificationsUnsupported
-                ? 'Notifications are unavailable in this browser context'
-                : notifyEnabled
-                  ? 'Disable path notifications'
-                  : 'Notify me when paths go online or offline'
-            "
+            v-if="hasApiAuth || apiAuthRequired"
+            :content="hasApiAuth ? 'API authentication — manage sign-in' : 'API requires sign-in'"
             placement="bottom"
           >
             <button
               class="icon-btn"
-              :class="{ enabled: notifyEnabled }"
-              :aria-label="notifyEnabled ? 'Disable notifications' : 'Enable notifications'"
-              @click="toggleNotifications"
+              :class="{ enabled: hasApiAuth }"
+              aria-label="API authentication"
+              @click="loginVisible = true"
             >
-              <el-icon><BellFilled v-if="notifyEnabled" /><Bell v-else /></el-icon>
+              <el-icon><Lock /></el-icon>
             </button>
           </el-tooltip>
+
+          <el-popover placement="bottom-end" :width="300" trigger="click">
+            <template #reference>
+              <button
+                class="icon-btn"
+                :class="{ enabled: notifyEnabled }"
+                :aria-label="notifyEnabled ? 'Disable notifications' : 'Enable notifications'"
+              >
+                <el-icon><BellFilled v-if="notifyEnabled" /><Bell v-else /></el-icon>
+              </button>
+            </template>
+            <div class="notify-panel">
+              <div class="notify-panel-title">Path notifications</div>
+              <div class="notify-panel-row">
+                <span>Notify on path online/offline</span>
+                <el-switch v-model="notifyEnabled" size="small" @change="toggleNotifications" />
+              </div>
+              <div v-if="notifyEnabled" class="notify-panel-row">
+                <span>Follow up when offline for</span>
+                <el-select
+                  :model-value="notifyOfflineThreshold"
+                  size="small"
+                  style="width: 110px"
+                  aria-label="Offline follow-up threshold"
+                  @change="onOfflineThresholdChange"
+                >
+                  <el-option label="Never" :value="0" />
+                  <el-option label="30 seconds" :value="30" />
+                  <el-option label="1 minute" :value="60" />
+                  <el-option label="5 minutes" :value="300" />
+                  <el-option label="10 minutes" :value="600" />
+                </el-select>
+              </div>
+              <p v-if="notificationsUnsupported" class="notify-panel-hint">
+                Notifications are unavailable in this browser context.
+              </p>
+            </div>
+          </el-popover>
 
           <el-popover
             placement="bottom-end"
@@ -514,7 +692,7 @@ onBeforeUnmount(() => {
               <p v-if="activityStore.entries.length === 0" class="activity-empty">
                 Actions you take — kicks, saves, deletes — will show up here for this session.
               </p>
-              <div v-else class="activity-list">
+              <div v-else class="activity-list" aria-live="polite">
                 <div v-for="e in activityStore.entries" :key="e.id" class="activity-item">
                   <span :class="['activity-dot', e.level]" />
                   <div class="activity-item-body">
@@ -541,6 +719,13 @@ onBeforeUnmount(() => {
       </header>
 
       <main class="app-main">
+        <div v-if="apiReadOnly" class="readonly-banner" role="status">
+          <el-icon><Lock /></el-icon>
+          <span
+            >This API user is read-only — saving config, kicking sessions, and deleting recordings
+            will be rejected by the server.</span
+          >
+        </div>
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -550,6 +735,44 @@ onBeforeUnmount(() => {
     </div>
 
     <CommandPalette v-model:visible="paletteVisible" />
+    <LoginDialog v-model:visible="loginVisible" />
+    <ServerProfilesDialog v-model:visible="serversDialogVisible" />
+
+    <el-dialog
+      v-model="shortcutsVisible"
+      title="Keyboard shortcuts"
+      width="420px"
+      align-center
+      :close-on-click-modal="true"
+    >
+      <div class="shortcut-list">
+        <div class="shortcut-row">
+          <span class="shortcut-keys"><kbd>⌘</kbd><kbd>K</kbd></span>
+          <span>Open quick search</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-keys"><kbd>g</kbd><kbd>p</kbd></span>
+          <span>Go to Path Status</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-keys"><kbd>g</kbd><kbd>r</kbd></span>
+          <span>Go to Recordings</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-keys"><kbd>g</kbd><kbd>c</kbd></span>
+          <span>Go to System Config</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-keys"><kbd>g</kbd><kbd>h</kbd></span>
+          <span>Go to Dashboard</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-keys"><kbd>?</kbd></span>
+          <span>Show this list</span>
+        </div>
+      </div>
+      <p class="shortcut-hint">Shortcuts are ignored while typing in a field.</p>
+    </el-dialog>
   </div>
 </template>
 
@@ -819,7 +1042,164 @@ onBeforeUnmount(() => {
   }
 }
 
+/* Server profile switcher */
+.server-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.server-switcher:hover {
+  background-color: var(--surface-hover);
+  color: var(--el-text-color-primary);
+  border-color: var(--el-border-color);
+}
+
+.server-switcher .el-icon {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+.server-switcher-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-switcher-chevron {
+  font-size: 11px !important;
+}
+
+.server-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 150px;
+}
+
+.server-dropdown-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .server-switcher {
+    display: none;
+  }
+}
+
 .icon-btn.enabled {
   color: var(--el-color-primary);
+}
+
+/* Notifications popover */
+.notify-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notify-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.notify-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--el-text-color-regular);
+}
+
+.notify-panel-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
+}
+
+/* Read-only banner */
+.readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  color: var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
+  border: 1px solid var(--el-color-warning-light-7);
+}
+
+.readonly-banner .el-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+/* Shortcuts dialog */
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 4px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.shortcut-keys {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.shortcut-keys kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--el-border-color);
+  border-bottom-width: 2px;
+  background: var(--el-fill-color-light);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--el-text-color-regular);
+  text-align: center;
+}
+
+.shortcut-hint {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
 }
 </style>

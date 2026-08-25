@@ -1,7 +1,15 @@
 export type CsvCell = string | number
 
-function escapeCsv(value: CsvCell): string {
-  const s = String(value ?? '')
+// Leading characters that spreadsheet applications interpret as formulas when
+// a cell is opened (e.g. =SUM(A1) executes, -2+3 evaluates, @cmd links). A
+// leading single quote neutralizes them and the quote itself is invisible in
+// Excel/Sheets. Negative numbers become text, but this UI's exports only
+// carry non-negative counts/bytes.
+const CSV_FORMULA_START = /^[=+\-@\t\r]/
+
+export function escapeCsv(value: CsvCell): string {
+  let s = String(value ?? '')
+  if (CSV_FORMULA_START.test(s)) s = `'${s}`
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 

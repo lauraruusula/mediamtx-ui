@@ -32,7 +32,9 @@
     <!-- Configured destinations -->
     <div class="section-head">
       <h4>Destinations</h4>
-      <el-button size="small" type="primary" :icon="Plus" @click="startAdd">Add Destination</el-button>
+      <el-button size="small" type="primary" :icon="Plus" @click="startAdd"
+        >Add Destination</el-button
+      >
     </div>
     <p class="section-desc">
       Streams published to this path are forwarded to each destination below.
@@ -41,7 +43,7 @@
     <div v-if="dests.length" class="dest-list">
       <div v-for="(d, i) in dests" :key="i" class="dest-row">
         <div class="dest-main">
-          <code class="dest-url">{{ d.dest }}</code>
+          <code class="dest-url">{{ redactUrlCredentials(d.dest) }}</code>
           <div class="dest-meta">
             <el-tag size="small">{{ protocolOf(d.dest) }}</el-tag>
             <el-tag v-if="d.destFingerprint" size="small" type="info">
@@ -92,7 +94,7 @@
     <el-table v-loading="initialLoading" :data="liveRows" size="small">
       <el-table-column label="Destination" min-width="170" show-overflow-tooltip>
         <template #default="{ row }">
-          <code class="live-dest">{{ row.conf.dest }}</code>
+          <code class="live-dest">{{ redactUrlCredentials(row.conf.dest) }}</code>
           <div v-if="row.state === 'error' && row.lastError" class="live-error">
             {{ row.lastError }}
           </div>
@@ -103,7 +105,9 @@
       </el-table-column>
       <el-table-column label="State" width="105">
         <template #default="{ row }">
-          <el-tag :type="stateType(row.state)" size="small">{{ formatForwardState(row.state) }}</el-tag>
+          <el-tag :type="stateType(row.state)" size="small">{{
+            formatForwardState(row.state)
+          }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="Outbound" width="90">
@@ -116,10 +120,7 @@
     <p v-if="liveError" class="live-error-hint">
       Live status unavailable — this path may be offline right now.
     </p>
-    <p
-      v-else-if="!initialLoading && liveRows.length === 0"
-      class="drawer-hint"
-    >
+    <p v-else-if="!initialLoading && liveRows.length === 0" class="drawer-hint">
       No live forwarding reported — this usually means the path is offline right now.
     </p>
 
@@ -133,10 +134,7 @@
     >
       <el-form label-width="150px">
         <el-form-item label="Destination URL" required>
-          <el-input
-            v-model="destForm.dest"
-            placeholder="rtsp://user:pass@host:8554/$MTX_PATH"
-          />
+          <el-input v-model="destForm.dest" placeholder="rtsp://user:pass@host:8554/$MTX_PATH" />
           <span class="form-hint">
             rtsp(s)://, rtmp(s)://, srt://, or whip(s):// — $MTX_PATH is replaced with this path
             name.
@@ -173,6 +171,7 @@ import { useListError } from '@/composables/useListError'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { formatBytes, formatDate } from '@/composables/useFormatters'
 import { toast } from '@/composables/useToast'
+import { redactUrlCredentials } from '@/composables/useRedaction'
 import { Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import type { APIForwardDest, APIForwardDestConfig } from '@/types/api'
@@ -232,12 +231,9 @@ const liveRows = computed<APIForwardDest[]>(() =>
 )
 
 const loadAll = async () => {
-  await run(
-    async () => {
-      await loadConfig()
-    },
-    'Failed to load forward destinations'
-  )
+  await run(async () => {
+    await loadConfig()
+  }, 'Failed to load forward destinations')
   await loadLive()
   initialLoading.value = false
 }

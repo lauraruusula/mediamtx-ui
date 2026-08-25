@@ -66,6 +66,7 @@ import {
 import { usePathsStore } from '@/stores/paths'
 import { useThemeStore } from '@/stores/theme'
 import { useActivityStore } from '@/stores/activity'
+import { useServersStore } from '@/stores/servers'
 import { listRecordings } from '@/api/recordings'
 import { useConfigStore, type ProtocolKey } from '@/stores/config'
 import { toast } from '@/composables/useToast'
@@ -89,6 +90,7 @@ const pathsStore = usePathsStore()
 const configStore = useConfigStore()
 const themeStore = useThemeStore()
 const activityStore = useActivityStore()
+const serversStore = useServersStore()
 
 const visible = computed({
   get: () => props.visible,
@@ -259,7 +261,7 @@ const pathItems = computed<PaletteItem[]>(() =>
     key: `path:${p.name}`,
     group: 'Paths',
     label: p.name,
-    hint: p.online ? 'Online' : 'Offline',
+    hint: p.online ? `Online · ${p.readers?.length || 0} readers` : 'Offline',
     icon: Connection,
     run: () => router.push({ path: '/paths', query: { q: p.name } })
   }))
@@ -326,7 +328,9 @@ watch(visible, async v => {
   configStore.ensureLoaded().catch(() => {})
   if (!pathsLoaded) {
     pathsLoaded = true
-    pathsStore.fetchList(0, 1000).catch(() => {})
+    // Fetch every page — path search shouldn't silently miss paths past the
+    // first 1,000.
+    pathsStore.fetchAll().catch(() => {})
   }
 })
 
@@ -334,6 +338,17 @@ watch(query, q => {
   activeIndex.value = 0
   if (q.trim()) ensureRecordings()
 })
+
+// A server-profile switch targets a different MediaMTX instance, so the cached
+// path/recording lists (and their loaded flags) must not carry over.
+watch(
+  () => serversStore.activeId,
+  () => {
+    pathsLoaded = false
+    recordingsLoaded = false
+    recordings.value = []
+  }
+)
 
 const move = (delta: number) => {
   if (!items.value.length) return

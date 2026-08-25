@@ -31,8 +31,23 @@
           />
         </el-select>
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
+        <el-tooltip
+          :disabled="!apiReadOnly"
+          content="This API user is read-only — changes are rejected by the server"
+          placement="bottom"
+        >
+          <el-button
+            :icon="Operation"
+            :disabled="!selectedRows.length || apiReadOnly"
+            @click="openBulkEdit"
+          >
+            Bulk edit{{ selectedRows.length ? ` (${selectedRows.length})` : '' }}
+          </el-button>
+        </el-tooltip>
         <el-button :icon="Download" @click="exportCsvData">Export</el-button>
-        <el-button type="primary" :icon="Plus" @click="showAddDialog">Add Path Config</el-button>
+        <el-button type="primary" :icon="Plus" :disabled="apiReadOnly" @click="showAddDialog"
+          >Add Path Config</el-button
+        >
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData">Refresh</el-button>
       </div>
     </div>
@@ -43,7 +58,14 @@
     <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData" />
 
     <el-card shadow="never">
-      <el-table v-loading="initialLoading" :data="filteredList" style="width: 100%">
+      <el-table
+        v-loading="initialLoading"
+        :data="filteredList"
+        style="width: 100%"
+        row-key="name"
+        @selection-change="onSelectionChange"
+      >
+        <el-table-column type="selection" width="42" reserve-selection />
         <el-table-column prop="name" label="Path Name" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <router-link class="cell-link" :to="{ path: '/paths', query: { q: row.name } }">
@@ -65,7 +87,9 @@
         </el-table-column>
         <el-table-column label="Source" min-width="220">
           <template #default="{ row }">
-            <span>{{ row.source || '-' }}</span>
+            <!-- Mask any user:password embedded in the source URL — the raw
+                 value stays in the edit dialog where it can be changed. -->
+            <span :title="row.source || ''">{{ redactUrlCredentials(row.source) || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="On Demand" width="100" align="center">
@@ -149,6 +173,7 @@
                     size="small"
                     type="danger"
                     plain
+                    :disabled="apiReadOnly"
                     title="Delete"
                     aria-label="Delete"
                   />
@@ -187,18 +212,58 @@
       width="640px"
       @closed="onDialogClosed"
     >
-      <PathConfForm :form="form" :name-disabled="isEdit" />
+      <PathConfForm :form="form" :name-disabled="isEdit" :original="editOriginal" />
       <template #footer>
         <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">Save</el-button>
+        <el-button type="primary" :loading="saving" :disabled="apiReadOnly" @click="handleSave"
+          >Save</el-button
+        >
       </template>
     </el-dialog>
 
-    <ForwardDestsDrawer
-      v-model="forwardDrawerVisible"
-      :path-name="forwardPath"
-      @saved="loadData"
-    />
+    <!-- Bulk edit dialog -->
+    <el-dialog v-model="bulkVisible" title="Bulk edit selected paths" width="420px">
+      <p class="bulk-hint">
+        Applying a setting here changes it on all {{ selectedRows.length }} selected path configs.
+        Fields left as "Don't change" are untouched.
+      </p>
+      <el-form label-width="140px">
+        <el-form-item label="Recording">
+          <el-select v-model="bulkForm.record" style="width: 100%">
+            <el-option label="Don't change" value="keep" />
+            <el-option label="On" value="on" />
+            <el-option label="Off" value="off" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="On demand">
+          <el-select v-model="bulkForm.sourceOnDemand" style="width: 100%">
+            <el-option label="Don't change" value="keep" />
+            <el-option label="On" value="on" />
+            <el-option label="Off" value="off" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Max Readers">
+          <div class="bulk-max-readers">
+            <el-checkbox v-model="bulkForm.maxReadersSet">Set max readers</el-checkbox>
+            <el-input-number
+              v-model="bulkForm.maxReaders"
+              :min="0"
+              :disabled="!bulkForm.maxReadersSet"
+              style="width: 100%"
+            />
+          </div>
+          <span class="form-hint">Unticked fields keep each path's current value</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="bulkVisible = false">Cancel</el-button>
+        <el-button type="primary" :loading="bulkSaving" :disabled="apiReadOnly" @click="handleBulkSave"
+          >Apply</el-button
+        >
+      </template>
+    </el-dialog>
+
+    <ForwardDestsDrawer v-model="forwardDrawerVisible" :path-name="forwardPath" @saved="loadData" />
   </div>
 </template>
 
@@ -219,6 +284,8 @@ import { useListError } from '@/composables/useListError'
 import { exportCsv } from '@/composables/useCsvExport'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { toast } from '@/composables/useToast'
+import { apiReadOnly } from '@/api'
+import { redactUrlCredentials } from '@/composables/useRedaction'
 import { emptyPathConfForm, fillPathConfForm, pathConfPayload } from '@/composables/usePathConfForm'
 import type { PathConfForm as PathConfFormModel } from '@/composables/usePathConfForm'
 import {
@@ -229,7 +296,8 @@ import {
   Delete,
   Download,
   CopyDocument,
-  Promotion
+  Promotion,
+  Operation
 } from '@element-plus/icons-vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import PathConfForm from '@/components/PathConfForm.vue'
@@ -264,24 +332,82 @@ const displayedCount = computed(() =>
 // can see at a glance whether a configured path is currently being served.
 const liveState = computed(() => new Map(pathsStore.list.map(p => [p.name, !!p.online])))
 
-const forwardCount = (row: any): number =>
-  Array.isArray(row.forward) ? row.forward.length : 0
+const forwardCount = (row: any): number => (Array.isArray(row.forward) ? row.forward.length : 0)
 
 const openForward = (name: string) => {
   forwardPath.value = name
   forwardDrawerVisible.value = true
 }
 
+// Bulk edit — multi-select rows, then apply a small set of settings to all of
+// them at once. Only the chosen fields are sent, so untouched settings on each
+// path keep their current values.
+const selectedRows = ref<any[]>([])
+const bulkVisible = ref(false)
+const bulkSaving = ref(false)
+const bulkForm = reactive({
+  record: 'keep' as 'keep' | 'on' | 'off',
+  sourceOnDemand: 'keep' as 'keep' | 'on' | 'off',
+  maxReadersSet: false,
+  maxReaders: 0
+})
+
+const onSelectionChange = (rows: any[]) => {
+  selectedRows.value = rows
+}
+
+const openBulkEdit = () => {
+  bulkForm.record = 'keep'
+  bulkForm.sourceOnDemand = 'keep'
+  bulkForm.maxReadersSet = false
+  bulkForm.maxReaders = 0
+  bulkVisible.value = true
+}
+
+const handleBulkSave = async () => {
+  const patch: Record<string, any> = {}
+  if (bulkForm.record !== 'keep') patch.record = bulkForm.record === 'on'
+  if (bulkForm.sourceOnDemand !== 'keep') {
+    patch.sourceOnDemand = bulkForm.sourceOnDemand === 'on'
+  }
+  if (bulkForm.maxReadersSet) patch.maxReaders = bulkForm.maxReaders
+  if (Object.keys(patch).length === 0) {
+    toast.info('No settings selected — nothing to apply')
+    return
+  }
+  bulkSaving.value = true
+  try {
+    let applied = 0
+    for (const row of selectedRows.value) {
+      await store.patch(row.name, patch)
+      applied++
+    }
+    toast.success(`Updated ${applied} path config${applied === 1 ? '' : 's'}`)
+    activityStore.log(`Bulk-edited ${applied} path config(s)`, 'success')
+    bulkVisible.value = false
+    await loadData()
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Failed to apply bulk edit'))
+  } finally {
+    bulkSaving.value = false
+  }
+}
+
 const form = reactive<PathConfFormModel>(emptyPathConfForm())
+// The loaded config behind the form, used by the "Changes" preview tab in
+// edit mode (null in add/clone mode where there's nothing to diff against).
+const editOriginal = ref<Record<string, any> | null>(null)
 
 const showAddDialog = () => {
   isEdit.value = false
+  editOriginal.value = null
   Object.assign(form, emptyPathConfForm())
   dialogVisible.value = true
 }
 
 const showEditDialog = (row: any) => {
   isEdit.value = true
+  editOriginal.value = row
   fillPathConfForm(form, row)
   dialogVisible.value = true
 }
@@ -290,6 +416,7 @@ const showCloneDialog = (row: any) => {
   // Prefill everything from the source path but blank the name, so saving
   // creates a new path config instead of overwriting the original.
   isEdit.value = false
+  editOriginal.value = null
   fillPathConfForm(form, row)
   form.name = ''
   dialogVisible.value = true
@@ -297,6 +424,7 @@ const showCloneDialog = (row: any) => {
 
 const onDialogClosed = () => {
   Object.assign(form, emptyPathConfForm())
+  editOriginal.value = null
 }
 
 const handleSave = async () => {
@@ -347,7 +475,7 @@ const { error, run } = useListError()
 const loadData = async () => {
   await run(async () => {
     if (search.value.trim()) {
-      await store.fetchList(0, 1000)
+      await store.fetchAll()
     } else {
       await pagination.load()
     }
@@ -363,7 +491,7 @@ const exportCsvData = () => {
     filteredList.value.map((r: any) => [
       r.name,
       liveState.value.has(r.name) ? (liveState.value.get(r.name) ? 'Online' : 'Offline') : '—',
-      r.source || '',
+      redactUrlCredentials(r.source) || '',
       r.sourceOnDemand ? 'Yes' : 'No',
       r.publishUser || r.readUser ? 'Yes' : 'No',
       r.record ? 'Yes' : 'No',
@@ -382,7 +510,7 @@ onMounted(() => {
   loadData()
   // Fetch the live path list too (guarded — /v3/paths/list can 404 before the
   // API is fully up), so the Online/Offline column has something to render.
-  pathsStore.fetchList(0, 1000).catch(() => {})
+  pathsStore.fetchAll().catch(() => {})
 })
 </script>
 
@@ -393,5 +521,30 @@ onMounted(() => {
 
 .forward-tag:hover {
   opacity: 0.85;
+}
+
+.bulk-hint {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
+.bulk-max-readers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.bulk-max-readers .el-checkbox {
+  height: auto;
+  margin-right: 0;
+}
+
+.form-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

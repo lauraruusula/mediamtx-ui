@@ -16,8 +16,13 @@
         <el-form-item label="Source">
           <el-input
             v-model="form.source"
+            type="password"
+            show-password
             placeholder="e.g. rtsp://... (leave empty to publish directly)"
           />
+          <span class="form-hint"
+            >URL may include credentials — they're hidden here but preserved as-is.</span
+          >
         </el-form-item>
         <el-form-item label="Source Fingerprint">
           <el-input v-model="form.sourceFingerprint" placeholder="e.g. 01:23:45:..." />
@@ -258,23 +263,51 @@
     <el-tab-pane label="Raw JSON" name="json">
       <el-form label-width="170px">
         <el-form-item label="Config JSON">
-          <el-input
-            v-model="jsonText"
-            type="textarea"
-            :rows="14"
-            class="json-editor"
-            spellcheck="false"
-          />
-          <span class="form-hint"
-            >Edit the raw path configuration. Validate before applying — invalid JSON is
-            rejected.</span
-          >
+          <div class="path-json-editor">
+            <JsonEditor v-model="jsonText" :rows="14" />
+            <span class="form-hint"
+              >Edit the raw path configuration. Validate before applying — invalid JSON is
+              rejected.</span
+            >
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="applyJson">Validate &amp; Apply</el-button>
           <el-button @click="resetJson">Reset</el-button>
         </el-form-item>
       </el-form>
+    </el-tab-pane>
+
+    <el-tab-pane v-if="original" :name="'changes'" :disabled="diffRows.length === 0">
+      <template #label>
+        Changes
+        <el-badge
+          v-if="diffRows.length"
+          :value="diffRows.length"
+          type="warning"
+          class="diff-badge"
+        />
+      </template>
+      <div v-if="diffRows.length" class="changes-preview">
+        <p class="changes-hint">
+          Top-level settings that will change when this path config is saved.
+        </p>
+        <div v-for="row in diffRows" :key="row.key" class="diff-row">
+          <div class="diff-row-head">
+            <span class="diff-key">{{ row.key }}</span>
+            <span class="diff-kind" :class="`kind-${row.kind}`">{{ row.kind }}</span>
+          </div>
+          <div v-if="row.kind === 'changed'" class="diff-values">
+            <span class="diff-value diff-before">{{ row.before }}</span>
+            <span class="diff-arrow">→</span>
+            <span class="diff-value diff-after">{{ row.after }}</span>
+          </div>
+          <div v-else class="diff-values">
+            <span class="diff-value diff-after">{{ row.after || row.before }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-else class="changes-none">No changes from the saved config yet.</div>
     </el-tab-pane>
   </el-tabs>
 </template>
@@ -286,18 +319,38 @@
 import { ref, computed, watch } from 'vue'
 import { toast } from '@/composables/useToast'
 import {
+  emptyPathConfForm,
   fillPathConfForm,
+  pathConfPayload,
   isRedactedCredential,
   type PathConfForm
 } from '@/composables/usePathConfForm'
+import { diffConfigs } from '@/composables/useConfigDiff'
+import JsonEditor from '@/components/JsonEditor.vue'
 
 const props = defineProps<{
   form: PathConfForm
   showName?: boolean
   nameDisabled?: boolean
+  // The loaded config this form was filled from — when present (edit mode),
+  // a "Changes" tab previews what a save would alter.
+  original?: Record<string, any> | null
 }>()
 
 const activeTab = ref('source')
+
+// Compare the current form payload against the config it was loaded from, so
+// admins see exactly what a save will change before committing. The "before"
+// side is re-derived through the same fill → payload transform the form uses,
+// so display mapping ('' → 'publisher', redacted passes omitted) matches.
+const diffRows = computed(() => {
+  if (!props.original) return []
+  const beforeForm = emptyPathConfForm()
+  fillPathConfForm(beforeForm, props.original)
+  const before = pathConfPayload(beforeForm) as Record<string, any>
+  const after = pathConfPayload(props.form) as Record<string, any>
+  return diffConfigs(before, after)
+})
 
 // publishIPs / readIPs are arrays in the API config; the form edits them as
 // comma-separated text.
@@ -377,8 +430,114 @@ const resetJson = () => {
 }
 
 .json-editor :deep(.el-textarea__inner) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.path-json-editor {
+  width: 100%;
+}
+
+/* Changes preview tab */
+.diff-badge {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.changes-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.changes-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--el-text-color-secondary);
+}
+
+.diff-row {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.diff-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.diff-key {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.diff-kind {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+}
+
+.diff-kind.kind-changed {
+  color: var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
+}
+
+.diff-kind.kind-added {
+  color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+}
+
+.diff-kind.kind-removed {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+
+.diff-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.diff-value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.diff-before {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+  text-decoration: line-through;
+}
+
+.diff-after {
+  color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+}
+
+.diff-arrow {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.changes-none {
+  padding: 20px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 </style>

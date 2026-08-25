@@ -215,17 +215,28 @@ export function useWebRTCPlayer(
     return frag
   }
 
+  // Link header items use quoted-strings per RFC 8288, which can contain
+  // backslash-escaped characters. Parsing them with JSON.parse on the raw
+  // match was fragile — an escaped quote/backslash inside a username or
+  // credential threw and killed the whole connection attempt.
+  const unquote = (s: string) => s.replace(/\\(.)/g, '$1')
+  // Quoted-string body: anything but an unescaped quote or backslash, or an
+  // escaped (backslash-prefixed) character.
+  const QUOTED = '((?:[^"\\\\]|\\\\.)*)'
+  const ICE_SERVER_LINK_RE = new RegExp(
+    `^<(.+?)>;\\s*rel="ice-server"(?:;\\s*username="${QUOTED}"\\s*;\\s*credential="${QUOTED}"\\s*;\\s*credential-type="password")?`,
+    'i'
+  )
+
   function linkToIceServers(links: string | null): RTCIceServer[] {
     if (!links) return []
     return links.split(', ').map(link => {
-      const m = link.match(
-        /^<(.+?)>; rel="ice-server"(; username="(.*?)"; credential="(.*?)"; credential-type="password")?/i
-      )
+      const m = link.match(ICE_SERVER_LINK_RE)
       if (!m) return { urls: [] }
       const ret: RTCIceServer = { urls: [m[1]] }
-      if (m[3] !== undefined) {
-        ret.username = JSON.parse(`"${m[3]}"`)
-        ret.credential = JSON.parse(`"${m[4]}"`)
+      if (m[2] !== undefined) {
+        ret.username = unquote(m[2])
+        ret.credential = unquote(m[3])
       }
       return ret
     })

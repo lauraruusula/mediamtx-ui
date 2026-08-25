@@ -1,4 +1,5 @@
 import type { APIRecordingSegment } from '@/types/api'
+import { streamHost } from '@/composables/useStreamHost'
 
 // MediaMTX's playback server (enabled via `playback: yes` in mediamtx.yml)
 // defaults to port 9996 and serves recorded segments at GET /get?path=&start=&duration=.
@@ -46,7 +47,7 @@ export function buildFullRecordingUrl(
     start: segments[0].start,
     duration: totalSeconds.toFixed(3)
   })
-  return `http://${window.location.hostname}:${port}/get?${params.toString()}`
+  return `http://${streamHost()}:${port}/get?${params.toString()}`
 }
 
 export function buildPlaybackUrl(
@@ -69,5 +70,5 @@ export function buildPlaybackUrl(
   // MediaMTX's playback server is plain HTTP (no TLS support), so the scheme
   // must not be inherited from the admin UI's own protocol — an HTTPS-served UI
   // would otherwise generate https:// links to an http-only server.
-  return `http://${window.location.hostname}:${port}/get?${params.toString()}`
+  return `http://${streamHost()}:${port}/get?${params.toString()}`
 }

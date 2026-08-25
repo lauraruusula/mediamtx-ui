@@ -32,13 +32,108 @@
         </el-select>
         <span v-if="lastUpdated.label" class="updated-hint">{{ lastUpdated.label }}</span>
         <el-button :icon="Download" @click="exportCsvData">Export</el-button>
+        <el-button :icon="Calendar" :loading="activityLoading" @click="toggleActivity"
+          >Activity</el-button
+        >
         <el-button :icon="Refresh" :loading="store.loading" @click="loadData(true)"
           >Refresh</el-button
         >
       </div>
     </div>
-    <p class="page-subtitle">Browse and manage recorded segments for each path.</p>
+    <p class="page-subtitle">
+      Browse and manage recorded segments for each path.
+      <el-tag
+        v-if="dayFilter"
+        type="primary"
+        size="small"
+        round
+        closable
+        class="day-filter-tag"
+        @close="clearDayFilter"
+      >
+        {{ formatDayLabel(dayFilter) }} — {{ dayFilteredCount }} recording{{
+          dayFilteredCount === 1 ? '' : 's'
+        }}
+      </el-tag>
+    </p>
     <ApiErrorBanner :message="error" :loading="store.loading" @retry="loadData(true)" />
+
+    <el-card v-if="activityVisible" shadow="never" class="activity-card">
+      <template #header>
+        <div class="activity-header">
+          <span class="activity-title">Recording activity</span>
+          <span class="activity-hint">Last {{ WEEKS }} weeks — click a day to filter</span>
+        </div>
+      </template>
+      <div v-loading="activityLoading" class="activity-body">
+        <template v-if="heatmapTotal > 0">
+          <div class="heatmap-wrap">
+            <div class="heatmap-months">
+              <span
+                v-for="(label, i) in monthLabels"
+                :key="i"
+                class="heatmap-month-label"
+                :style="{ marginLeft: label.offset }"
+                >{{ label.text }}</span
+              >
+            </div>
+            <div class="heatmap-body">
+              <div class="heatmap-days">
+                <span class="heatmap-day-label">Mon</span>
+                <span class="heatmap-day-label"></span>
+                <span class="heatmap-day-label">Wed</span>
+                <span class="heatmap-day-label"></span>
+                <span class="heatmap-day-label">Fri</span>
+                <span class="heatmap-day-label"></span>
+                <span class="heatmap-day-label"></span>
+              </div>
+              <div class="heatmap-weeks">
+                <div v-for="(week, wi) in heatmapCells" :key="wi" class="heatmap-week">
+                  <el-tooltip
+                    v-for="cell in week"
+                    :key="cell.key"
+                    :content="
+                      cell.count > 0
+                        ? `${cell.count} segment${cell.count === 1 ? '' : 's'} on ${formatDayLabel(cell.key)}`
+                        : formatDayLabel(cell.key)
+                    "
+                    placement="top"
+                    :hide-after="0"
+                  >
+                    <button
+                      type="button"
+                      class="heatmap-cell"
+                      :class="[`level-${cell.level}`, { 'is-selected': cell.key === dayFilter }]"
+                      :aria-label="
+                        cell.count > 0
+                          ? `${cell.count} segments on ${formatDayLabel(cell.key)}`
+                          : formatDayLabel(cell.key)
+                      "
+                      :aria-pressed="cell.key === dayFilter"
+                      @click="toggleDayFilter(cell.key)"
+                    />
+                  </el-tooltip>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="heatmap-legend">
+            <span>Less</span>
+            <span class="legend-cell level-0"></span>
+            <span class="legend-cell level-1"></span>
+            <span class="legend-cell level-2"></span>
+            <span class="legend-cell level-3"></span>
+            <span class="legend-cell level-4"></span>
+            <span>More</span>
+          </div>
+        </template>
+        <el-empty
+          v-else-if="!activityLoading"
+          description="No recording activity in the last 26 weeks"
+          :image-size="60"
+        />
+      </div>
+    </el-card>
 
     <el-card shadow="never">
       <el-table
@@ -92,9 +187,15 @@
       </el-table>
       <el-empty
         v-if="!error && !initialLoading && filteredList.length === 0"
-        :description="search ? `No recordings match “${search}”` : 'No recordings yet'"
+        :description="
+          dayFilter
+            ? `No recordings recorded on ${formatDayLabel(dayFilter)}`
+            : search
+              ? `No recordings match “${search}”`
+              : 'No recordings yet'
+        "
       />
-      <div v-if="!search && store.itemCount > 0" class="pagination-bar">
+      <div v-if="!search && !dayFilter && store.itemCount > 0" class="pagination-bar">
         <el-pagination
           v-model:current-page="pagination.page.value"
           v-model:page-size="pagination.pageSize.value"
@@ -152,17 +253,37 @@
           is enabled in
           <router-link to="/config?tab=playback">System Config</router-link>.
         </p>
-        <el-date-picker
-          v-model="segDateRange"
-          type="daterange"
-          range-separator="–"
-          start-placeholder="From"
-          end-placeholder="To"
-          size="small"
-          style="width: 100%; margin-bottom: 12px"
-          clearable
-          @change="segPage = 1"
-        />
+        <div class="seg-filter-row">
+          <el-date-picker
+            v-model="segDateRange"
+            type="daterange"
+            range-separator="–"
+            start-placeholder="From"
+            end-placeholder="To"
+            size="small"
+            style="flex: 1; min-width: 0"
+            clearable
+            @change="segPage = 1"
+          />
+          <el-tooltip
+            :disabled="!apiReadOnly"
+            content="This API user is read-only — deletions are rejected by the server"
+            placement="top"
+          >
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              :icon="Delete"
+              :loading="deletingRange"
+              :disabled="apiReadOnly || !segDateRange || filteredSegments.length === 0"
+              aria-label="Delete segments in the selected date range"
+              @click="confirmRangeDelete"
+            >
+              Delete filtered
+            </el-button>
+          </el-tooltip>
+        </div>
         <el-table
           :data="pagedSegments"
           style="width: 100%"
@@ -213,6 +334,7 @@
                       size="small"
                       type="danger"
                       plain
+                      :disabled="apiReadOnly"
                       title="Delete segment"
                       aria-label="Delete segment"
                     />
@@ -249,10 +371,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useRecordingsStore } from '@/stores/recordings'
 import { useActivityStore } from '@/stores/activity'
 import { useConfigStore } from '@/stores/config'
+import { useServersStore } from '@/stores/servers'
 import { usePagination } from '@/composables/usePagination'
 import {
   useAutoRefresh,
@@ -280,9 +403,12 @@ import {
   VideoPlay,
   Download,
   Delete,
-  CopyDocument
+  CopyDocument,
+  Calendar
 } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
+import { apiReadOnly } from '@/api'
+import { ElMessageBox } from 'element-plus'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import PathLink from '@/components/PathLink.vue'
 import HlsPlayer from '@/components/HlsPlayer.vue'
@@ -291,9 +417,11 @@ import type { APIRecording } from '@/types/api'
 const SEG_PAGE_SIZE = 20
 
 const store = useRecordingsStore()
+const serversStore = useServersStore()
 const activityStore = useActivityStore()
 const configStore = useConfigStore()
 const route = useRoute()
+const router = useRouter()
 const drawerVisible = ref(false)
 const currentRecording = ref<APIRecording | null>(null)
 const refreshingRecording = ref(false)
@@ -324,9 +452,151 @@ const { error, run } = useListError()
 const sort = useTableSort('sort:recordings')
 const segSort = useTableSort('sort:recording-segments')
 
-const filteredList = computed(() =>
-  filterList(store.list, search.value, (r: APIRecording) => r.name)
-)
+const filteredList = computed(() => {
+  let list = filterList(store.list, search.value, (r: APIRecording) => r.name)
+  if (dayFilter.value) {
+    list = list.filter(r =>
+      (r.segments || []).some(s => dayKey(new Date(s.start)) === dayFilter.value)
+    )
+  }
+  return list
+})
+
+// Recording activity heatmap — segment counts bucketed by local day, rendered
+// GitHub-style over the last WEEKS weeks. The full recording list is fetched
+// once (lazily, when the panel is first opened) so the heatmap is complete
+// regardless of the table's pagination.
+const WEEKS = 26
+const MONTH_LABELS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec'
+]
+const activityVisible = ref(false)
+const activityLoading = ref(false)
+let activityLoaded = false
+const dayFilter = ref<string | null>(null)
+
+const dayKey = (date: Date) => {
+  const y = date.getFullYear()
+  const m = `${date.getMonth() + 1}`.padStart(2, '0')
+  const d = `${date.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const formatDayLabel = (key: string) => {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  })
+}
+
+// Segment counts bucketed by local day. Derived directly from the store so a
+// day-filtered reload (or any refresh) keeps the heatmap current — the panel
+// doesn't need its own snapshot that can go stale.
+const recordingDays = computed<Record<string, number>>(() => {
+  const counts: Record<string, number> = {}
+  for (const rec of store.list) {
+    for (const seg of rec.segments || []) {
+      const key = dayKey(new Date(seg.start))
+      counts[key] = (counts[key] || 0) + 1
+    }
+  }
+  return counts
+})
+
+const toggleActivity = async () => {
+  activityVisible.value = !activityVisible.value
+  if (!activityVisible.value || activityLoaded) return
+  activityLoading.value = true
+  try {
+    await store.fetchAll()
+    activityLoaded = true
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Failed to load activity data'))
+  } finally {
+    activityLoading.value = false
+  }
+}
+
+const heatmapTotal = computed(() => Object.values(recordingDays.value).reduce((a, b) => a + b, 0))
+
+// Columns of weeks (Mon→Sun), oldest first. Each cell is bucketed by date and
+// assigned a 0–4 intensity level by quantizing against the busiest day, so a
+// quiet period still shows useful variation.
+const heatmapCells = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const daysSinceMonday = (today.getDay() + 6) % 7
+  const start = new Date(today)
+  start.setDate(today.getDate() - daysSinceMonday - (WEEKS - 1) * 7)
+  const weeks: { date: Date; key: string; count: number; level: number }[][] = []
+  for (let w = 0; w < WEEKS; w++) {
+    const col: { date: Date; key: string; count: number; level: number }[] = []
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(start)
+      date.setDate(start.getDate() + w * 7 + d)
+      const key = dayKey(date)
+      col.push({ date, key, count: recordingDays.value[key] || 0, level: 0 })
+    }
+    weeks.push(col)
+  }
+  const max = Math.max(1, ...weeks.flat().map(c => c.count))
+  for (const col of weeks) {
+    for (const cell of col) {
+      cell.level = cell.count === 0 ? 0 : Math.max(1, Math.ceil((cell.count / max) * 4))
+    }
+  }
+  return weeks
+})
+
+const monthLabels = computed(() => {
+  const labels: { text: string; offset: string }[] = []
+  const weeks = heatmapCells.value
+  if (!weeks.length) return labels
+  const last = weeks[weeks.length - 1][6].date
+  const cursor = new Date(weeks[0][0].date.getFullYear(), weeks[0][0].date.getMonth(), 1)
+  while (cursor <= last) {
+    const monthStart = new Date(cursor)
+    for (let w = 0; w < weeks.length; w++) {
+      const weekStart = weeks[w][0].date
+      const weekEnd = weeks[w][6].date
+      if (monthStart >= weekStart && monthStart <= weekEnd) {
+        labels.push({ text: MONTH_LABELS[monthStart.getMonth()], offset: `${w * 13}px` })
+        break
+      }
+    }
+    cursor.setMonth(cursor.getMonth() + 1)
+    cursor.setDate(1)
+  }
+  return labels
+})
+
+const toggleDayFilter = (key: string) => {
+  dayFilter.value = dayFilter.value === key ? null : key
+}
+
+const clearDayFilter = () => {
+  dayFilter.value = null
+}
+
+const dayFilteredCount = computed(() => {
+  if (!dayFilter.value) return 0
+  return store.list.filter(r =>
+    (r.segments || []).some(s => dayKey(new Date(s.start)) === dayFilter.value)
+  ).length
+})
 
 // Sortable column for the segment count — the count isn't a row field, so it
 // needs an explicit comparator (a `prop` alone would sort by row[undefined]).
@@ -339,7 +609,7 @@ const compareTotalDuration = (a: APIRecording, b: APIRecording) =>
 // While searching, the badge reflects what's on screen rather than the server
 // total (the list is fetched in full and filtered client-side).
 const displayedCount = computed(() =>
-  search.value.trim() ? filteredList.value.length : store.itemCount
+  search.value.trim() || dayFilter.value ? filteredList.value.length : store.itemCount
 )
 
 // Date filter + client-side pagination for the segments table — recordings can
@@ -450,6 +720,43 @@ const handleDeleteSegment = async (name: string, start: string) => {
   }
 }
 
+// Bulk delete — removes every segment currently matched by the drawer's date
+// range. Sequential calls keep the server's delete path happy on large ranges.
+const deletingRange = ref(false)
+const confirmRangeDelete = async () => {
+  const name = currentRecording.value?.name
+  if (!name || !segDateRange.value) return
+  const count = filteredSegments.value.length
+  if (count === 0) return
+  try {
+    await ElMessageBox.confirm(
+      count > 500
+        ? `Delete all ${count} segments in this range? This cannot be undone and will take a while.`
+        : `Delete all ${count} segments in this range? This cannot be undone.`,
+      'Delete segments',
+      { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' }
+    )
+  } catch {
+    return // cancelled
+  }
+  deletingRange.value = true
+  try {
+    for (const seg of filteredSegments.value) {
+      await store.deleteSegment(name, seg.start)
+    }
+    toast.success(`Deleted ${count} segments`)
+    activityStore.log(`Deleted ${count} recording segments from "${name}"`, 'success')
+    await loadData(true)
+    currentRecording.value = await store.fetchOne(name)
+    const totalPages = Math.ceil((currentRecording.value.segments?.length || 0) / segPageSize)
+    if (segPage.value > totalPages && totalPages > 0) segPage.value = totalPages
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Failed to delete segments'))
+  } finally {
+    deletingRange.value = false
+  }
+}
+
 const pagination = usePagination(
   (page, itemsPerPage) => store.fetchList(page, itemsPerPage),
   20,
@@ -464,9 +771,10 @@ let fullListLoaded = false
 
 const loadData = async (force = false) => {
   await run(async () => {
-    if (search.value.trim()) {
+    // A day filter (heatmap) also needs the complete list, like search.
+    if (search.value.trim() || dayFilter.value) {
       if (!fullListLoaded || force) {
-        await store.fetchList(0, 1000)
+        await store.fetchAll()
         fullListLoaded = true
       }
     } else {
@@ -505,12 +813,172 @@ watch(
   }
 )
 
+// Mirror the search box in the URL so a filtered view is shareable and the
+// back button undoes it. `replace` keeps history clean while typing.
+watch(search, val => {
+  const q = route.query.q
+  if (val.trim() && q !== val) {
+    router.replace({ query: { ...route.query, q: val } })
+  } else if (!val.trim() && q !== undefined) {
+    const query = { ...route.query }
+    delete query.q
+    router.replace({ query })
+  }
+})
+
 onMounted(() => {
   loadData()
 })
+
+// A server-profile switch targets a different MediaMTX instance — the cached
+// full list, the open recording drawer and any date filter must not carry over.
+watch(
+  () => serversStore.activeId,
+  () => {
+    fullListLoaded = false
+    drawerVisible.value = false
+    currentRecording.value = null
+    segDateRange.value = null
+    dayFilter.value = null
+    loadData()
+  }
+)
 </script>
 
 <style scoped>
+.day-filter-tag {
+  margin-left: 8px;
+}
+
+.activity-card {
+  margin-bottom: 16px;
+}
+
+.activity-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.activity-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.activity-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.activity-body {
+  min-height: 60px;
+}
+
+.heatmap-wrap {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.heatmap-months {
+  display: flex;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  height: 16px;
+  margin-left: 28px;
+}
+
+.heatmap-month-label {
+  flex-shrink: 0;
+  width: 13px;
+  white-space: nowrap;
+}
+
+.heatmap-body {
+  display: flex;
+  gap: 4px;
+}
+
+.heatmap-days {
+  display: flex;
+  flex-direction: column;
+  height: 91px; /* 7 cells × 13px */
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  padding: 0 2px;
+}
+
+.heatmap-day-label {
+  line-height: 11px;
+}
+
+.heatmap-weeks {
+  display: flex;
+  gap: 2px;
+}
+
+.heatmap-week {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.heatmap-cell {
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--el-fill-color-light);
+  transition: transform 0.1s ease;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.2);
+}
+
+.heatmap-cell.is-selected {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 1px;
+}
+
+.heatmap-cell.level-1 {
+  background: var(--el-color-primary-light-9);
+}
+
+.heatmap-cell.level-2 {
+  background: var(--el-color-primary-light-7);
+}
+
+.heatmap-cell.level-3 {
+  background: var(--el-color-primary-light-3);
+}
+
+.heatmap-cell.level-4 {
+  background: var(--el-color-primary);
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+
+.legend-cell {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.legend-cell.level-0 {
+  background: var(--el-fill-color-light);
+}
+
 .drawer-header {
   display: flex;
   align-items: center;
@@ -558,6 +1026,13 @@ onMounted(() => {
   font-weight: 400;
   color: var(--el-text-color-secondary);
   margin-left: 6px;
+}
+
+.seg-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .drawer-hint code {

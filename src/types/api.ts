@@ -221,14 +221,7 @@ export interface APIRecording {
 // GET /v3/paths/forward/get?path=&id=
 export type APIForwardDestState = 'idle' | 'forwarding' | 'error'
 
-export type APIForwardDestProtocol =
-  | 'rtmp'
-  | 'rtmps'
-  | 'rtsp'
-  | 'rtsps'
-  | 'srt'
-  | 'whip'
-  | 'whips'
+export type APIForwardDestProtocol = 'rtmp' | 'rtmps' | 'rtsp' | 'rtsps' | 'srt' | 'whip' | 'whips'
 
 // One entry of a path config's `forward` array
 export interface APIForwardDestConfig {

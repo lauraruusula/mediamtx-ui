@@ -1,13 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getInfo, getPaths } from '@/api/system'
+import { getInfo, getAllPaths } from '@/api/system'
 import { getRTSPConnections } from '@/api/rtspConn'
 import { getRTSPSessions } from '@/api/rtspSession'
 import { getRTMPConnections } from '@/api/rtmpConn'
 import { getWebRTCSessions } from '@/api/webrtc'
 import { listHlsMuxers } from '@/api/hlsMuxer'
 import { getSRTConnections } from '@/api/srtConn'
-import type { APIInfo, APIPath, APIListResponse } from '@/types/api'
+import type { APIInfo, APIPath } from '@/types/api'
 
 interface ProtocolCounts {
   rtspConns: number
@@ -62,6 +62,12 @@ export const useSystemStore = defineStore('system', () => {
     return dist
   })
 
+  // Total live connections across every protocol, for the dashboard trend.
+  const totalConnections = computed(() => {
+    const c = protocolCounts.value
+    return c.rtspConns + c.rtspSessions + c.rtmpConns + c.webrtcSessions + c.hlsMuxers + c.srtConns
+  })
+
   const fetchInfo = async () => {
     const res = await getInfo()
     info.value = res as unknown as APIInfo
@@ -69,9 +75,10 @@ export const useSystemStore = defineStore('system', () => {
   }
 
   const fetchPaths = async () => {
-    const res = (await getPaths(0, 1000)) as unknown as APIListResponse<APIPath>
-    paths.value = res.items || []
-    pathCount.value = res.itemCount || 0
+    // Fetch every page so dashboard aggregates aren't silently truncated at
+    // 1,000 paths (a single call caps at itemsPerPage=1000).
+    paths.value = await getAllPaths()
+    pathCount.value = paths.value.length
     // Any successful full-path fetch proves the API is reachable, so the
     // header status can be restored without an extra /info round-trip.
     connected.value = true
@@ -127,6 +134,7 @@ export const useSystemStore = defineStore('system', () => {
     totalInboundBytes,
     totalOutboundBytes,
     sourceTypeDistribution,
+    totalConnections,
     fetchInfo,
     fetchPaths,
     fetchProtocolCounts,

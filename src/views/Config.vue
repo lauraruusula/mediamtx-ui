@@ -6,8 +6,60 @@
         <el-tag v-if="isDirty" type="warning" size="small" round>Unsaved changes</el-tag>
       </h1>
       <div class="page-actions">
+        <el-autocomplete
+          v-model="fieldSearch"
+          :fetch-suggestions="searchConfigFields"
+          placeholder="Search config fields…"
+          clearable
+          style="width: 230px"
+          :trigger-on-focus="false"
+          aria-label="Search config fields"
+          @select="jumpToField"
+        >
+          <template #default="{ item }">
+            <div class="field-suggestion">
+              <span class="field-suggestion-label">{{ item.label }}</span>
+              <span class="field-suggestion-key">{{ item.key }}</span>
+              <span class="field-suggestion-tab">{{ item.tabName }}</span>
+            </div>
+          </template>
+        </el-autocomplete>
         <el-button :icon="Refresh" @click="refreshConfig">Refresh</el-button>
-        <el-button type="primary" :disabled="!isDirty" @click="confirmSave">Save Config</el-button>
+        <el-tooltip
+          content="Download global config, path defaults and all path configs as JSON"
+          placement="bottom"
+        >
+          <el-button :icon="Download" :loading="backingUp" @click="handleBackup">Backup</el-button>
+        </el-tooltip>
+        <el-tooltip
+          :disabled="!apiReadOnly"
+          content="This API user is read-only — restoring a backup would be rejected"
+          placement="bottom"
+        >
+          <el-button
+            :icon="Upload"
+            :loading="restoring"
+            :disabled="apiReadOnly"
+            @click="fileInput?.click()"
+            >Restore</el-button
+          >
+        </el-tooltip>
+        <el-tooltip
+          :disabled="!apiReadOnly"
+          content="This API user is read-only — saves are rejected by the server"
+          placement="bottom"
+        >
+          <el-button type="primary" :disabled="!isDirty || apiReadOnly" @click="confirmSave">
+            Save Config
+          </el-button>
+        </el-tooltip>
+        <input
+          ref="fileInput"
+          type="file"
+          accept="application/json,.json"
+          class="hidden-file-input"
+          @change="onRestoreFileSelected"
+        />
       </div>
     </div>
     <p class="page-subtitle">
@@ -553,14 +605,7 @@
             </p>
           </div>
           <div class="json-editor">
-            <el-input
-              v-model="jsonText"
-              type="textarea"
-              :rows="20"
-              class="json-textarea"
-              spellcheck="false"
-              placeholder="Loading config…"
-            />
+            <JsonEditor v-model="jsonText" :rows="20" :invalid="!jsonValid" />
             <div class="json-actions">
               <el-button :icon="MagicStick" @click="formatJson">Format</el-button>
               <el-button type="primary" :icon="Check" :disabled="!jsonValid" @click="applyJson">
@@ -582,11 +627,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
 import { useActivityStore } from '@/stores/activity'
 import { refreshJwks } from '@/api/auth'
+import {
+  getAllPathsConfig,
+  getPathConfigDefaults,
+  updatePathConfigDefaults,
+  replacePathConfig
+} from '@/api/pathsConfig'
+import { exportJson } from '@/composables/useJsonExport'
 import { ElMessageBox } from 'element-plus'
 import {
   Refresh,
@@ -604,12 +656,16 @@ import {
   Operation,
   Document,
   MagicStick,
+  Download,
+  Upload,
   Check
 } from '@element-plus/icons-vue'
 import { getErrorMessage } from '@/composables/useErrorMessage'
 import { toast } from '@/composables/useToast'
+import { apiReadOnly } from '@/api'
 import { isRedactedCredential } from '@/composables/usePathConfForm'
 import PathDefaultsPanel from '@/components/PathDefaultsPanel.vue'
+import JsonEditor from '@/components/JsonEditor.vue'
 
 const configStore = useConfigStore()
 const activityStore = useActivityStore()
@@ -632,6 +688,152 @@ const validTabs = [
   'pathdefaults',
   'json'
 ]
+
+// S7: field search — a curated index of the fields the form exposes, so typing
+// a config key or label jumps straight to the field's tab and scrolls it into
+// view. Tabs mount lazily, so the index is data, not DOM, and stays cheap.
+const TAB_NAMES: Record<string, string> = {
+  general: 'General',
+  metrics: 'Metrics',
+  auth: 'Auth',
+  rtsp: 'RTSP',
+  rtmp: 'RTMP',
+  hls: 'HLS',
+  webrtc: 'WebRTC',
+  srt: 'SRT',
+  api: 'API',
+  record: 'Recording',
+  playback: 'Playback',
+  pathdefaults: 'Path Defaults',
+  json: 'Raw JSON'
+}
+
+interface ConfigFieldEntry {
+  key: string
+  tab: string
+  tabName: string
+  label: string
+}
+
+const entry = (key: string, tab: string, label: string): ConfigFieldEntry => ({
+  key,
+  tab,
+  tabName: TAB_NAMES[tab] || tab,
+  label
+})
+
+const FIELD_INDEX: ConfigFieldEntry[] = [
+  // General
+  entry('logLevel', 'general', 'Log Level'),
+  entry('logDestinations', 'general', 'Log Destinations'),
+  entry('logStructured', 'general', 'Structured Logging'),
+  entry('logFile', 'general', 'Log File'),
+  entry('readTimeout', 'general', 'Read Timeout'),
+  entry('writeTimeout', 'general', 'Write Timeout'),
+  entry('writeQueueSize', 'general', 'Write Queue Size'),
+  entry('udpMaxPayloadSize', 'general', 'UDP Max Payload Size'),
+  entry('runOnConnect', 'general', 'Run on Connect'),
+  entry('runOnConnectRestart', 'general', 'Restart on Connect Hook Exit'),
+  entry('runOnDisconnect', 'general', 'Run on Disconnect'),
+  // Metrics
+  entry('metrics', 'metrics', 'Enable Metrics'),
+  entry('metricsAddress', 'metrics', 'Metrics Address'),
+  entry('metricsEncryption', 'metrics', 'Metrics Encryption'),
+  entry('metricsAllowOrigins', 'metrics', 'Metrics Allow Origins'),
+  // Auth
+  entry('authMethod', 'auth', 'Auth Method'),
+  entry('authHTTPAddress', 'auth', 'HTTP Auth Address'),
+  entry('authJWTJWKS', 'auth', 'JWT JWKS'),
+  // RTSP
+  entry('rtsp', 'rtsp', 'Enable RTSP'),
+  entry('rtspAddress', 'rtsp', 'RTSP Address'),
+  entry('rtspsAddress', 'rtsp', 'RTSPS Address'),
+  entry('rtspEncryption', 'rtsp', 'RTSP Encryption'),
+  entry('rtspTransports', 'rtsp', 'Transports'),
+  entry('rtspAuthMethods', 'rtsp', 'Auth Methods'),
+  entry('rtpAddress', 'rtsp', 'RTP Address'),
+  entry('rtcpAddress', 'rtsp', 'RTCP Address'),
+  // RTMP
+  entry('rtmp', 'rtmp', 'Enable RTMP'),
+  entry('rtmpAddress', 'rtmp', 'RTMP Address'),
+  entry('rtmpEncryption', 'rtmp', 'RTMP Encryption'),
+  entry('rtmpsAddress', 'rtmp', 'RTMPS Address'),
+  // HLS
+  entry('hls', 'hls', 'Enable HLS'),
+  entry('hlsAddress', 'hls', 'HLS Address'),
+  entry('hlsVariant', 'hls', 'HLS Variant'),
+  entry('hlsEncryption', 'hls', 'Encryption'),
+  entry('hlsAlwaysRemux', 'hls', 'Always Remux'),
+  entry('hlsAllowOrigins', 'hls', 'Allow Origins'),
+  entry('hlsDirectory', 'hls', 'Directory'),
+  entry('hlsSegmentCount', 'hls', 'Segment Count'),
+  entry('hlsSegmentDuration', 'hls', 'Segment Duration'),
+  entry('hlsPartDuration', 'hls', 'Part Duration'),
+  entry('hlsSegmentMaxSize', 'hls', 'Segment Max Size'),
+  entry('hlsMuxerCloseAfter', 'hls', 'Close Muxer After'),
+  // WebRTC
+  entry('webrtc', 'webrtc', 'Enable WebRTC'),
+  entry('webrtcAddress', 'webrtc', 'WebRTC Address'),
+  entry('webrtcEncryption', 'webrtc', 'Encryption'),
+  entry('webrtcAdditionalHosts', 'webrtc', 'Additional Hosts'),
+  entry('webrtcICEServers', 'webrtc', 'ICE Servers'),
+  entry('webrtcICEHostNAT1To1IPs', 'webrtc', 'Host NAT 1:1 IPs'),
+  entry('webrtcIPsFromInterfaces', 'webrtc', 'IPs from Interfaces'),
+  entry('webrtcSTUNGatherTimeout', 'webrtc', 'STUN Gather Timeout'),
+  entry('webrtcHandshakeTimeout', 'webrtc', 'Handshake Timeout'),
+  entry('webrtcTrackGatherTimeout', 'webrtc', 'Track Gather Timeout'),
+  // SRT
+  entry('srt', 'srt', 'Enable SRT'),
+  entry('srtAddress', 'srt', 'SRT Address'),
+  // API
+  entry('api', 'api', 'Enable API'),
+  entry('apiAddress', 'api', 'API Address'),
+  entry('apiEncryption', 'api', 'API Encryption'),
+  entry('apiAllowOrigins', 'api', 'Allow Origins'),
+  entry('apiTrustedProxies', 'api', 'Trusted Proxies'),
+  // Recording
+  entry('record', 'record', 'Enable Recording'),
+  entry('recordPath', 'record', 'Recording Path'),
+  entry('recordFormat', 'record', 'Recording Format'),
+  // Playback
+  entry('playback', 'playback', 'Enable Playback'),
+  entry('playbackAddress', 'playback', 'Playback Address'),
+  entry('playbackAuth', 'playback', 'Playback Auth')
+]
+
+const fieldSearch = ref('')
+
+const searchConfigFields = (
+  query: string,
+  cb: (results: (ConfigFieldEntry & { value: string })[]) => void
+) => {
+  const q = query.trim().toLowerCase()
+  const matches = (q ? FIELD_INDEX : [])
+    .filter(f => f.key.toLowerCase().includes(q) || f.label.toLowerCase().includes(q))
+    .slice(0, 12)
+    .map(f => ({ ...f, value: f.label }))
+  cb(matches)
+}
+
+// Jump to the field's tab, wait for the lazy pane to render, then scroll the
+// matching form item into view and flash it so the eye lands on the result.
+const jumpToField = async (item: Record<string, any>) => {
+  const target = item as ConfigFieldEntry
+  activeTab.value = target.tab
+  await nextTick()
+  await nextTick()
+  const visiblePane = document.querySelector('.el-tabs__content .el-tab-pane:not([style*="display: none"])')
+  if (!visiblePane) return
+  const formItems = visiblePane.querySelectorAll<HTMLElement>('.el-form-item')
+  for (const formItem of formItems) {
+    const label = formItem.querySelector('.el-form-item__label')?.textContent?.trim()
+    if (label !== target.label) continue
+    formItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    formItem.classList.add('field-highlight')
+    setTimeout(() => formItem.classList.remove('field-highlight'), 1800)
+    return
+  }
+}
 
 // Tabs sit in a left rail on wide screens and move to a horizontal bar on
 // narrow ones (where a 10-item vertical rail would push the form off-screen).
@@ -844,6 +1046,104 @@ const handleRefreshJwks = async () => {
   }
 }
 
+// Backup / restore — snapshots the global config, path defaults and every path
+// config into a single JSON file, and applies a snapshot back on top of the
+// live server. Restore is additive where possible: paths are upserted by name,
+// and fields not present in the file are left untouched.
+const fileInput = ref<HTMLInputElement | null>(null)
+const backingUp = ref(false)
+const restoring = ref(false)
+
+const handleBackup = async () => {
+  backingUp.value = true
+  try {
+    const globalConfig = await configStore.fetchConfig()
+    // The response interceptor unwraps `.data`, but the axios typings don't
+    // reflect that — cast here to keep the payload clean.
+    const pathDefaults = (await getPathConfigDefaults()) as unknown as Record<string, any>
+    const paths = await getAllPathsConfig()
+    const payload = {
+      app: 'mediamtx-ui',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      global: globalConfig,
+      pathDefaults: pathDefaults ?? {},
+      paths: paths.map(p => ({ name: p.name, config: p.config ?? {} }))
+    }
+    exportJson(`mediamtx-config-backup-${new Date().toISOString().slice(0, 10)}.json`, payload)
+    toast.success('Backup downloaded')
+    activityStore.log('Downloaded config backup', 'success')
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Failed to create backup'))
+  } finally {
+    backingUp.value = false
+  }
+}
+
+const onRestoreFileSelected = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  let payload: any
+  try {
+    payload = JSON.parse(await file.text())
+  } catch {
+    toast.error('The selected file is not valid JSON')
+    return
+  }
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    (!('global' in payload) && !('paths' in payload))
+  ) {
+    toast.error('This file does not look like a mediamtx-ui backup')
+    return
+  }
+  const pathCount = Array.isArray(payload.paths) ? payload.paths.length : 0
+  try {
+    await ElMessageBox.confirm(
+      `Apply this backup to the server? It will overwrite the global config${
+        pathCount ? ` and upsert ${pathCount} path config${pathCount === 1 ? '' : 's'}` : ''
+      }. Current unsaved form edits will be replaced.`,
+      'Restore config backup',
+      { confirmButtonText: 'Restore', cancelButtonText: 'Cancel', type: 'warning' }
+    )
+  } catch {
+    return // cancelled
+  }
+  await restoreBackup(payload)
+}
+
+const restoreBackup = async (payload: any) => {
+  restoring.value = true
+  try {
+    if (payload.global && typeof payload.global === 'object') {
+      await configStore.saveConfig(payload.global)
+    }
+    if (payload.pathDefaults && typeof payload.pathDefaults === 'object') {
+      await updatePathConfigDefaults(payload.pathDefaults)
+    }
+    let applied = 0
+    if (Array.isArray(payload.paths)) {
+      for (const p of payload.paths) {
+        if (!p || typeof p.name !== 'string') continue
+        await replacePathConfig(p.name, p.config ?? {})
+        applied++
+      }
+    }
+    toast.success(
+      `Restored backup${applied ? ` — ${applied} path config${applied === 1 ? '' : 's'}` : ''}`
+    )
+    activityStore.log('Restored config backup', 'success')
+    await refreshConfig()
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Failed to restore backup'))
+  } finally {
+    restoring.value = false
+  }
+}
+
 const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
   if (isDirty.value) {
     e.preventDefault()
@@ -890,6 +1190,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.hidden-file-input {
+  display: none;
+}
+
 .config-card {
   overflow: hidden;
 }
@@ -992,12 +1296,6 @@ onBeforeUnmount(() => {
   max-width: 900px;
 }
 
-.json-editor .json-textarea :deep(textarea) {
-  font-family: var(--font-mono, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace);
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
 .json-actions {
   display: flex;
   align-items: center;
@@ -1009,6 +1307,55 @@ onBeforeUnmount(() => {
 .json-actions .el-alert {
   flex: 1 1 100%;
   margin-top: 4px;
+}
+
+/* Config field search */
+.field-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.field-suggestion-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+
+.field-suggestion-key {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-suggestion-tab {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--el-color-primary);
+}
+
+:deep(.el-form-item.field-highlight) {
+  animation: field-flash 1.8s ease;
+}
+
+@keyframes field-flash {
+  0%,
+  100% {
+    background: transparent;
+  }
+  25%,
+  75% {
+    background: var(--el-color-primary-light-8);
+    border-radius: var(--radius-sm);
+  }
 }
 
 .page-header h1 {

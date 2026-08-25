@@ -168,6 +168,11 @@ let statsTimer: ReturnType<typeof setInterval> | null = null
 
 const configStore = useConfigStore()
 const whepPort = ref(8889)
+// WHEP playback uses the same scheme as the admin UI — an https-served UI is
+// assumed to sit behind a TLS edge that also fronts the WebRTC/HLS ports (same
+// assumption the copy-link builder makes), so WebRTC playback wouldn't be
+// blocked as mixed content.
+const whepScheme = ref<'http' | 'https'>(window.location.protocol === 'https:' ? 'https' : 'http')
 let controlsTimer: ReturnType<typeof setTimeout> | null = null
 // Set on unmount. The player dialog uses destroy-on-close, so the config
 // promise may still be resolving when this component is torn down — without
@@ -196,8 +201,10 @@ function getWhepUrl() {
     return `${props.whepBaseUrl}/${encodedPath}/whep`
   }
   // Direct connection to the MediaMTX WebRTC server (Vite proxy interferes with
-  // WHEP protocol headers). Always http — the WHEP server has no TLS support.
-  return buildWhepUrl(props.pathName, whepPort.value)
+  // WHEP protocol headers). Use the same scheme as the UI — a UI behind a TLS
+  // edge plays over https so WebRTC isn't blocked as mixed content; over plain
+  // http the WHEP server is reached directly.
+  return buildWhepUrl(props.pathName, whepPort.value, whepScheme.value)
 }
 
 function startPlayer() {

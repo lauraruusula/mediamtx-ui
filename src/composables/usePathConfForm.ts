@@ -168,10 +168,7 @@ export function pathConfPayload(form: PathConfForm): Record<string, unknown> {
     // server copies every PATCHed field verbatim, so re-sending the
     // placeholder would replace the real password with that literal string.
     // Omit it instead, leaving the existing password untouched.
-    if (
-      (key === 'publishPass' || key === 'readPass') &&
-      isRedactedCredential(value)
-    ) {
+    if ((key === 'publishPass' || key === 'readPass') && isRedactedCredential(value)) {
       continue
     }
     if (key === 'source' && value === '') {

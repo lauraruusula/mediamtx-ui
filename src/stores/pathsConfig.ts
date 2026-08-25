@@ -27,6 +27,18 @@ export const usePathsConfigStore = defineStore('pathsConfig', () => {
     }
   }
 
+  // Full-list fetch for the search path, which filters client-side and so
+  // needs every config — not just the current page (and not a 1,000-item cap).
+  const fetchAll = async () => {
+    loading.value = true
+    try {
+      list.value = await api.getAllPathsConfig()
+      itemCount.value = list.value.length
+    } finally {
+      loading.value = false
+    }
+  }
+
   const fetchOne = async (name: string) => {
     const res = (await api.getPathConfig(name)) as any
     current.value = res
@@ -68,6 +80,7 @@ export const usePathsConfigStore = defineStore('pathsConfig', () => {
     defaults,
     loading,
     fetchList,
+    fetchAll,
     fetchOne,
     add,
     patch,

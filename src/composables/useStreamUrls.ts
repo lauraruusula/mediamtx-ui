@@ -1,3 +1,5 @@
+import { streamHost } from '@/composables/useStreamHost'
+
 export interface StreamUrl {
   protocol: string
   label: string
@@ -105,7 +107,7 @@ export function buildStreamUrls(
 ): StreamUrl[] {
   if (!pathName) return []
 
-  const host = window.location.hostname
+  const host = streamHost()
   // Encode each path segment individually so names with special characters
   // can't alter the URL's structure, while preserving intentional slashes.
   const p = pathName.split('/').map(encodeURIComponent).join('/')
@@ -146,12 +148,18 @@ export function buildStreamUrls(
     .map(protocol => urls[protocol])
 }
 
-// MediaMTX's WebRTC server has no TLS support, so the WHEP playback endpoint
-// must always use http (an https-served UI would otherwise hand the player an
-// unreachable https:// target). Copy-links may use https via buildStreamUrls.
-export function buildWhepUrl(pathName: string, port = DEFAULT_PORTS.webrtc): string {
+// MediaMTX's WebRTC server has no TLS support of its own, so the WHEP playback
+// endpoint uses plain http when the UI is served over http. When the UI sits
+// behind a TLS edge (https), the copy-links already advertise https WHEP URLs
+// — the in-page player must use the same scheme, or WebRTC playback is blocked
+// as mixed content. Callers pass the scheme explicitly so tests stay pure.
+export function buildWhepUrl(
+  pathName: string,
+  port = DEFAULT_PORTS.webrtc,
+  scheme: 'http' | 'https' = 'http'
+): string {
   const encodedPath = pathName.split('/').map(encodeURIComponent).join('/')
-  return `http://${window.location.hostname}:${port}/${encodedPath}/whep`
+  return `${scheme}://${streamHost()}:${port}/${encodedPath}/whep`
 }
 
 // MediaMTX's built-in playback server defaults to port 9996 and can be moved

@@ -110,6 +110,18 @@
         <el-table-column label="Outbound" width="120" sortable prop="outboundBytes">
           <template #default="{ row }">{{ formatBytes(row.outboundBytes || 0) }}</template>
         </el-table-column>
+        <el-table-column label="Traffic" width="140">
+          <template #default="{ row }">
+            <PathSparkline
+              v-if="store.trafficFor(row.name).length > 1"
+              :points="store.trafficFor(row.name)"
+              :width="110"
+              :height="28"
+              title="Total traffic over recent refreshes"
+            />
+            <span v-else class="traffic-empty">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Actions" width="120" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
@@ -289,7 +301,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { usePathsStore } from '@/stores/paths'
 import { useConfigStore } from '@/stores/config'
 import { usePagination } from '@/composables/usePagination'
@@ -325,6 +337,7 @@ import type { APIPath, APIPathTrack } from '@/types/api'
 const store = usePathsStore()
 const configStore = useConfigStore()
 const route = useRoute()
+const router = useRouter()
 // Prefilled when arriving via a "view this path" link from a connections/sessions
 // table (e.g. /paths?q=mystream) so the two views stay cross-navigable.
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
@@ -406,25 +419,11 @@ const copyUrl = async (u: StreamUrl) => {
   }
 }
 
-// Per-path traffic samples collected while the detail drawer is open, rendered
-// as a small sparkline. Auto refresh (or manual refreshes) feed new samples.
-const MAX_SPARKLINE_SAMPLES = 60
-const pathTrafficHistory = ref<Record<string, number[]>>({})
-
+// Per-path traffic history lives in the store (sampled from list fetches and
+// persisted), so the drawer sparkline and the table column stay in sync.
 const currentSparkline = computed(() =>
-  currentPath.value ? pathTrafficHistory.value[currentPath.value.name] || [] : []
+  currentPath.value ? store.trafficFor(currentPath.value.name) : []
 )
-
-const sampleCurrentPath = () => {
-  const name = currentPath.value?.name
-  if (!drawerVisible.value || !name) return
-  const p = store.list.find(x => x.name === name)
-  if (!p) return
-  const history = pathTrafficHistory.value[name] || []
-  history.push((p.inboundBytes || 0) + (p.outboundBytes || 0))
-  if (history.length > MAX_SPARKLINE_SAMPLES) history.shift()
-  pathTrafficHistory.value[name] = history
-}
 
 const trackDetail = (t: APIPathTrack): string => {
   const props = (t.codecProps || {}) as Record<string, unknown>
@@ -468,7 +467,6 @@ const refreshPath = async () => {
   refreshingPath.value = true
   try {
     currentPath.value = await store.fetchOne(currentPath.value.name)
-    sampleCurrentPath()
   } catch (err) {
     toast.error(getErrorMessage(err, 'Failed to refresh path details'))
   } finally {
@@ -499,13 +497,12 @@ const loadData = async () => {
     // Searching or filtering covers the whole path list, not just the current
     // page — this is also what makes the /paths?q= cross-links work.
     if (search.value.trim() || statusFilter.value !== 'all') {
-      await store.fetchList(0, 1000)
+      await store.fetchAll()
     } else {
       await pagination.load()
     }
     initialLoading.value = false
     lastUpdated.markUpdated()
-    sampleCurrentPath()
   }, 'Failed to load paths')
 }
 
@@ -520,6 +517,19 @@ watch(
     search.value = typeof q === 'string' ? q : ''
   }
 )
+
+// Mirror the search box in the URL so a filtered view is shareable and the
+// back button undoes it. `replace` keeps history clean while typing.
+watch(search, val => {
+  const q = route.query.q
+  if (val.trim() && q !== val) {
+    router.replace({ query: { ...route.query, q: val } })
+  } else if (!val.trim() && q !== undefined) {
+    const query = { ...route.query }
+    delete query.q
+    router.replace({ query })
+  }
+})
 
 onMounted(() => {
   loadData()
@@ -591,6 +601,11 @@ onMounted(() => {
 .danger-text {
   color: var(--el-color-danger);
   font-weight: 600;
+}
+
+.traffic-empty {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 
 .track-list {

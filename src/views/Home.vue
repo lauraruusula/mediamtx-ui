@@ -154,6 +154,8 @@
         v-if="bandwidthHistory.length > 1"
         :option="bandwidthTrendOption"
         style="height: 180px"
+        role="img"
+        aria-label="Bandwidth trend over time"
         autoresize
       />
       <div v-else class="bandwidth-placeholder">
@@ -172,7 +174,13 @@
             <span>Source Type Distribution</span>
           </div>
         </template>
-        <v-chart :option="pieOption" style="height: 280px" autoresize />
+        <v-chart
+          :option="pieOption"
+          style="height: 280px"
+          role="img"
+          aria-label="Source type distribution"
+          autoresize
+        />
       </el-card>
 
       <el-card class="dash-card" shadow="never">
@@ -184,9 +192,100 @@
             <span>Protocol Connections</span>
           </div>
         </template>
-        <v-chart :option="barOption" style="height: 280px" autoresize />
+        <v-chart
+          :option="barOption"
+          style="height: 280px"
+          role="img"
+          aria-label="Connections by protocol"
+          autoresize
+        />
+      </el-card>
+
+      <el-card class="dash-card" shadow="never">
+        <template #header>
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-icon tint-sky"
+                ><el-icon><Odometer /></el-icon
+              ></span>
+              <span>Connections Trend</span>
+              <span class="panel-hint">total live connections · survives reloads</span>
+            </div>
+            <div class="panel-stats">
+              <div class="panel-stat">
+                <span class="panel-stat-label">Current</span>
+                <span class="panel-stat-value">{{ systemStore.totalConnections }}</span>
+              </div>
+              <div class="panel-stat">
+                <span class="panel-stat-label">Peak</span>
+                <span class="panel-stat-value">{{ peakConnections }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <v-chart
+          v-if="connectionHistory.length > 1"
+          :option="connectionsTrendOption"
+          style="height: 280px"
+          role="img"
+          aria-label="Live connections trend"
+          autoresize
+        />
+        <div v-else class="bandwidth-placeholder">
+          Waiting for samples — connection counts update on the slower 15s tick.
+        </div>
       </el-card>
     </div>
+
+    <!-- Top paths by traffic -->
+    <el-card class="dash-card" shadow="never">
+      <template #header>
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-icon tint-orange"
+              ><el-icon><Rank /></el-icon
+            ></span>
+            <span>Top Paths by Traffic</span>
+            <span class="panel-hint">online paths by cumulative inbound + outbound</span>
+          </div>
+          <div class="panel-actions">
+            <el-button text type="primary" @click="$router.push('/paths')">View All</el-button>
+          </div>
+        </div>
+      </template>
+      <div v-if="topPathsByTraffic.length" class="top-paths">
+        <div v-for="(row, i) in topPathsByTraffic" :key="row.name" class="top-path-row">
+          <span class="top-path-rank" :class="`rank-${i + 1}`">{{ i + 1 }}</span>
+          <router-link
+            class="cell-link path-link top-path-name"
+            :to="{ path: '/paths', query: { q: row.name } }"
+          >
+            {{ row.name }}
+          </router-link>
+          <span class="top-path-health">
+            <HealthBadge :info="pathHealth(row)" />
+          </span>
+          <span class="top-path-bytes">{{ formatBytes(row.inboundBytes || 0) }} ↑</span>
+          <span class="top-path-bytes">{{ formatBytes(row.outboundBytes || 0) }} ↓</span>
+          <span class="top-path-bar" aria-hidden="true">
+            <span
+              class="top-path-bar-in"
+              :style="{
+                width: `${trafficPct(row, 'inbound')}%`
+              }"
+            />
+            <span
+              class="top-path-bar-out"
+              :style="{
+                width: `${trafficPct(row, 'outbound')}%`
+              }"
+            />
+          </span>
+          <span class="top-path-total">{{ formatBytes(pathTraffic(row)) }}</span>
+        </div>
+      </div>
+      <el-empty v-else-if="!systemStore.loading" description="No online paths with traffic yet" />
+    </el-card>
 
     <!-- Active paths -->
     <el-card class="dash-card" shadow="never">
@@ -324,9 +423,11 @@ import {
   Odometer,
   TrendCharts,
   PieChart,
-  Histogram
+  Histogram,
+  Rank
 } from '@element-plus/icons-vue'
 import { useCountUp } from '@/composables/useCountUp'
+import { prefersReducedMotion } from '@/composables/useReducedMotion'
 import { pathHealth } from '@/composables/useStreamHealth'
 import StreamPlayer from '@/components/StreamPlayer.vue'
 import CopyLinkButton from '@/components/CopyLinkButton.vue'
@@ -436,10 +537,132 @@ const clearStaleSamples = () => {
   }
 }
 
+// Connection-count trend: sampled on the slow 15s protocol-count tick (each
+// sample is a full fetch of all six count probes), so 80 samples ≈ 20 minutes.
+// Persisted the same way as the bandwidth history so reloads keep the line.
+interface ConnectionSample {
+  time: number
+  count: number
+}
+const CONNECTION_STORAGE_KEY = 'dash:connection-history'
+const MAX_CONNECTION_SAMPLES = 80
+
+const loadConnectionHistory = (): ConnectionSample[] => {
+  try {
+    const raw = localStorage.getItem(CONNECTION_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (s): s is ConnectionSample =>
+        typeof s === 'object' &&
+        s !== null &&
+        typeof s.time === 'number' &&
+        typeof s.count === 'number'
+    )
+  } catch {
+    return []
+  }
+}
+
+const connectionHistory = ref<ConnectionSample[]>(loadConnectionHistory())
+
+const recordConnectionSample = (count: number) => {
+  connectionHistory.value.push({ time: Date.now(), count })
+  if (connectionHistory.value.length > MAX_CONNECTION_SAMPLES) connectionHistory.value.shift()
+  try {
+    localStorage.setItem(CONNECTION_STORAGE_KEY, JSON.stringify(connectionHistory.value))
+  } catch {
+    // Storage unavailable — the trend just won't survive a reload.
+  }
+}
+
+const peakConnections = computed(() => {
+  const h = connectionHistory.value
+  return h.length ? Math.max(...h.map(s => s.count)) : 0
+})
+
+const connectionsTrendOption = computed(() => {
+  const data: [number, number][] = connectionHistory.value.map(s => [s.time, s.count])
+  return {
+    animation: chartAnimation,
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) =>
+        `${new Date(params[0].value[0]).toLocaleTimeString()}<br/>${params[0].seriesName}: ${
+          params[0].value[1]
+        }`
+    },
+    grid: { left: 34, right: 14, top: 12, bottom: 26 },
+    xAxis: {
+      type: 'time',
+      axisLabel: { color: chartTextSecondary.value, fontSize: 11 },
+      axisLine: { lineStyle: { color: chartAxisLine.value } }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: chartTextSecondary.value, fontSize: 11 },
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: chartSplitLine.value } }
+    },
+    series: [
+      {
+        name: 'Connections',
+        type: 'line',
+        data,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2, color: '#0ea5e9' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(14, 165, 233, 0.3)' },
+              { offset: 1, color: 'rgba(14, 165, 233, 0)' }
+            ]
+          }
+        }
+      }
+    ]
+  }
+})
+
+// Top paths by cumulative traffic — a small leaderboard of the busiest paths,
+// deep-linking back to the Paths view. Bars show the inbound/outbound split
+// scaled against the busiest path so the ranking is readable at a glance.
+const topPathsByTraffic = computed(() =>
+  [...systemStore.paths]
+    .filter(p => p.online)
+    .sort(
+      (a, b) =>
+        (b.inboundBytes || 0) +
+        (b.outboundBytes || 0) -
+        ((a.inboundBytes || 0) + (a.outboundBytes || 0))
+    )
+    .slice(0, 5)
+)
+
+const pathTraffic = (p: APIPath) => (p.inboundBytes || 0) + (p.outboundBytes || 0)
+
+const trafficPct = (p: APIPath, side: 'inbound' | 'outbound') => {
+  const max = pathTraffic(topPathsByTraffic.value[0])
+  if (!max) return 0
+  const value = side === 'inbound' ? p.inboundBytes || 0 : p.outboundBytes || 0
+  return Math.max((value / max) * 100, 0.5)
+}
+
 // ECharts renders to <canvas>, which can't resolve CSS custom properties like
 // var(--el-text-color-secondary) — so chart colors are tracked as literal
 // values keyed off the active theme instead.
 const isDark = computed(() => themeStore.currentTheme === 'dark')
+// ECharts animations are off for users who prefer reduced motion (the global
+// CSS override can't reach canvas rendering).
+const chartAnimation = !prefersReducedMotion()
 const chartTextSecondary = computed(() => (isDark.value ? '#98a2b3' : '#667085'))
 const chartTextRegular = computed(() => (isDark.value ? '#d0d5dd' : '#344054'))
 const chartSurfaceBg = computed(() => (isDark.value ? '#12151d' : '#ffffff'))
@@ -563,6 +786,7 @@ const pieOption = computed(() => {
     value
   }))
   return {
+    animation: chartAnimation,
     color: ['#4a63ee', '#8b5cf6', '#12b76a', '#f79009', '#0ea5e9', '#f04438'],
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: { bottom: 0, textStyle: { color: chartTextRegular.value } },
@@ -585,6 +809,7 @@ const pieOption = computed(() => {
 const barOption = computed(() => {
   const c = systemStore.protocolCounts
   return {
+    animation: chartAnimation,
     tooltip: { trigger: 'axis' },
     grid: { left: 60, right: 20, top: 10, bottom: 30 },
     xAxis: {
@@ -622,6 +847,7 @@ const bandwidthTrendOption = computed(() => {
   const inboundData: [number, number][] = bandwidthRates.value.map(r => [r.time, r.inboundRate])
   const outboundData: [number, number][] = bandwidthRates.value.map(r => [r.time, r.outboundRate])
   return {
+    animation: chartAnimation,
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
@@ -693,6 +919,7 @@ const refreshData = async () => {
   try {
     await systemStore.fetchAll()
     recordBandwidthSample()
+    recordConnectionSample(systemStore.totalConnections)
     lastUpdated.markUpdated()
   } finally {
     // Clear the one-shot loading mask even when the first fetch fails —
@@ -736,7 +963,10 @@ onMounted(() => {
   refreshData().catch(() => {})
   protocolTimer = setInterval(() => {
     if (document.hidden) return
-    systemStore.fetchProtocolCounts().catch(() => {})
+    systemStore
+      .fetchProtocolCounts()
+      .then(() => recordConnectionSample(systemStore.totalConnections))
+      .catch(() => {})
   }, PROTOCOL_COUNTS_INTERVAL_MS)
 })
 
@@ -1063,11 +1293,17 @@ onBeforeUnmount(() => {
   background: rgba(18, 183, 106, 0.1);
 }
 
+.panel-icon.tint-orange {
+  color: var(--dash-orange);
+  background: rgba(240, 149, 12, 0.1);
+}
+
 :root.dark .dashboard {
   --dash-blue: #6b84ff;
   --dash-violet: #a78bfa;
   --dash-sky: #38bdf8;
   --dash-green: #32d583;
+  --dash-orange: #fb923c;
 }
 
 :root.dark .panel-icon.tint-blue {
@@ -1084,6 +1320,110 @@ onBeforeUnmount(() => {
 
 :root.dark .panel-icon.tint-green {
   background: rgba(50, 213, 131, 0.18);
+}
+
+:root.dark .panel-icon.tint-orange {
+  background: rgba(251, 146, 60, 0.18);
+}
+
+/* Top paths by traffic leaderboard */
+.top-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.top-path-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.top-path-row:hover {
+  background: var(--el-fill-color-light);
+}
+
+.top-path-rank {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  flex-shrink: 0;
+}
+
+.top-path-rank.rank-1 {
+  color: var(--dash-orange);
+  background: rgba(240, 149, 12, 0.14);
+}
+
+.top-path-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.top-path-bytes {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.top-path-bar {
+  display: flex;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--el-fill-color-light);
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.top-path-bar-in {
+  height: 100%;
+  background: var(--dash-sky);
+  transition: width 0.4s ease;
+}
+
+.top-path-bar-out {
+  height: 100%;
+  background: var(--dash-violet);
+  transition: width 0.4s ease;
+}
+
+.top-path-total {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 90px;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .top-path-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .top-path-bar {
+    order: 5;
+    width: 100%;
+  }
+  .top-path-total {
+    order: 6;
+    min-width: auto;
+  }
 }
 
 /* Layout */

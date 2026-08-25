@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { listRecordings, getRecording, deleteRecordingSegment } from '@/api/recordings'
+import {
+  listRecordings,
+  getAllRecordings,
+  getRecording,
+  deleteRecordingSegment
+} from '@/api/recordings'
 import type { APIRecording, APIListResponse } from '@/types/api'
 
 export const useRecordingsStore = defineStore('recordings', () => {
@@ -22,6 +27,19 @@ export const useRecordingsStore = defineStore('recordings', () => {
     }
   }
 
+  // Full-list fetch for the search path, which filters client-side and so
+  // needs every recording — not just the current page (and not a 1,000-item
+  // cap). Records the last full fetch so typing doesn't refetch each keystroke.
+  const fetchAll = async () => {
+    loading.value = true
+    try {
+      list.value = await getAllRecordings()
+      itemCount.value = list.value.length
+    } finally {
+      loading.value = false
+    }
+  }
+
   const fetchOne = async (name: string) => {
     const res = await getRecording(name)
     return res as unknown as APIRecording
@@ -31,5 +49,5 @@ export const useRecordingsStore = defineStore('recordings', () => {
     await deleteRecordingSegment(path, start)
   }
 
-  return { list, itemCount, loading, fetchList, fetchOne, deleteSegment }
+  return { list, itemCount, loading, fetchList, fetchAll, fetchOne, deleteSegment }
 })

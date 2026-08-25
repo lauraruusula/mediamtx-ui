@@ -10,6 +10,10 @@
           <el-icon><DocumentCopy /></el-icon>
           {{ u.label }}
         </el-dropdown-item>
+        <el-dropdown-item v-if="urls.length > 1" divided :command="'__all__'">
+          <el-icon><Files /></el-icon>
+          Copy all URLs
+        </el-dropdown-item>
       </template>
     </el-dropdown>
   </el-tooltip>
@@ -17,7 +21,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Link, DocumentCopy } from '@element-plus/icons-vue'
+import { Link, DocumentCopy, Files } from '@element-plus/icons-vue'
 import { toast } from '@/composables/useToast'
 import { useConfigStore } from '@/stores/config'
 import {
@@ -63,7 +67,17 @@ const urls = computed(() =>
   )
 )
 
-async function handleCopy(u: StreamUrl) {
+async function handleCopy(u: StreamUrl | '__all__') {
+  if (u === '__all__') {
+    const all = urls.value.map(item => `${item.label}: ${item.url}`).join('\n')
+    const ok = await copyToClipboard(all)
+    if (ok) {
+      toast.success(`Copied ${urls.value.length} stream URLs to clipboard`)
+    } else {
+      toast.error('Could not copy to clipboard')
+    }
+    return
+  }
   const ok = await copyToClipboard(u.url)
   if (ok) {
     toast.success(`Copied ${u.label} URL to clipboard`)

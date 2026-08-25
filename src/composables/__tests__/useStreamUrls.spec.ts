@@ -72,8 +72,14 @@ describe('buildStreamUrls', () => {
 })
 
 describe('buildWhepUrl', () => {
-  it('always uses plain http', () => {
+  it('uses plain http by default', () => {
     expect(buildWhepUrl('cam', 8889)).toBe(`http://${window.location.hostname}:8889/cam/whep`)
+  })
+
+  it('uses https when the UI is behind a TLS edge', () => {
+    expect(buildWhepUrl('cam', 8889, 'https')).toBe(
+      `https://${window.location.hostname}:8889/cam/whep`
+    )
   })
 })
 

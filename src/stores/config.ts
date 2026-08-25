@@ -48,6 +48,15 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // Forces a refetch even when the config was already loaded — needed when the
+  // active server profile changes, since protocol-enabled flags and stream URL
+  // ports must reflect the newly targeted server, not the cached one.
+  const reload = async () => {
+    loaded.value = false
+    loadPromise = null
+    return fetchConfig()
+  }
+
   // True unless the config explicitly says the protocol's server is off.
   // MediaMTX omits default-valued flags, so a missing flag means "enabled".
   // Before the config has loaded we assume enabled so pages never flash hidden.
@@ -71,6 +80,7 @@ export const useConfigStore = defineStore('config', () => {
     protocols,
     fetchConfig,
     ensureLoaded,
+    reload,
     saveConfig,
     protocolEnabled
   }

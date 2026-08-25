@@ -22,3 +22,20 @@ export const getPathConfigDefaults = () => api.get('/v3/config/pathdefaults/get'
 
 export const updatePathConfigDefaults = (config: any) =>
   api.patch('/v3/config/pathdefaults/patch', config)
+
+/** Fetches every path config across all pages (search-full-fetch path). */
+export const getAllPathsConfig = async (): Promise<any[]> => {
+  const first = (await getPathsConfig(0, 1000)) as unknown as {
+    items?: any[]
+    pageCount?: number
+  }
+  const items = [...(first.items || [])]
+  for (let page = 1; page < (first.pageCount ?? 1); page++) {
+    const res = (await getPathsConfig(page, 1000)) as unknown as {
+      items?: any[]
+      pageCount?: number
+    }
+    items.push(...(res.items || []))
+  }
+  return items
+}
