@@ -4,26 +4,46 @@ A modern web admin dashboard for [MediaMTX](https://github.com/bluenviron/mediam
 
 ## Features
 
-- **Dashboard** — Live KPIs, source-type and protocol charts, a persistent split inbound/outbound bandwidth trend (survives reloads), server health (version/uptime), a path frame-errors health KPI, and active paths with in-browser WebRTC (WHEP) preview and copy-link; auto-refresh (on by default) with interval control and an API unreachable banner
+- **Dashboard** — Live KPIs, source-type and protocol charts, a persistent split inbound/outbound bandwidth trend (survives reloads), a connections-over-time trend with peak, a top-paths-by-traffic leaderboard, server health (version/uptime), a path frame-errors health KPI, and active paths with in-browser WebRTC (WHEP) preview and copy-link; auto-refresh (on by default) with interval control and an API unreachable banner
 - **Path Status** — Search, status filter (online/available/offline), sortable columns, pagination, CSV export, health badges, a persistent per-path traffic sparkline, and a detail drawer with per-protocol URLs (RTSP/RTMP/HLS/WebRTC/SRT from live config, respecting encryption mode), codec tracks, timestamps, and a traffic sparkline
-- **Path Config** — Add/edit/duplicate/delete path configs: source & on-demand, publish/read auth, recording, run-on hooks, advanced options (IP allowlists, override publish, record durations), and a Path Defaults tab that new paths inherit; search, pagination, and CSV export
+- **Path Config** — Add/edit/duplicate/delete path configs: source & on-demand, publish/read auth, recording, run-on hooks, advanced options (IP allowlists, override publish, record durations), and a Path Defaults tab that new paths inherit; bulk edit multiple paths at once, search, pagination, and CSV export
 - **Forward destinations** — Configure per-path forwarding (RTSP/RTSPS, RTMP/RTMPS, SRT, WHIP/WHIPS) from the Path Config page — TLS fingerprint and WHIP bearer-token support — and monitor live per-destination state (idle/forwarding/error), error details, outbound traffic, and creation time with auto-refresh
+- **Multiple servers** — Manage profiles for several MediaMTX instances and switch from the header; each profile can override the API endpoint and the host used when building stream and playback URLs
 - **Connections** — Searchable, sortable, paginated tables with CSV export across RTSP connections (read-only), RTSP sessions, RTMP, WebRTC, HLS muxers (read-only), and SRT; health badges and per-session detail drawers; single and bulk kick where the API supports it; path links back to Path Status
 - **Protocol awareness** — Disabled protocols are hidden from nav and the command palette; deep links show an empty state with a jump to the matching System Config tab
 - **Recordings** — Browse by path with search/sort/pagination/CSV; a 26-week activity heatmap with click-to-filter; open a segment drawer (optional date filter) showing total duration with a copyable full playback URL and a bulk delete for the filtered range; play segments in-browser via hls.js (controls, picture-in-picture, stats overlay); download or delete segments via MediaMTX playback
-- **System Config** — Edit common global settings (logging, auth, protocols, API, recording, playback) with dirty tracking, save confirmation, leave warnings, JWT JWKS refresh, field search that jumps straight to the setting, and a syntax-highlighted raw JSON editor for fields the form doesn't expose
+- **System Config** — Edit common global settings (logging, auth, protocols, API, recording, playback) with dirty tracking, save confirmation, leave warnings, JWT JWKS refresh, field search that jumps straight to the setting, a syntax-highlighted raw JSON editor for fields the form doesn't expose, and config backup/restore with a diff preview of pending changes
 - **Stream player** — In-browser WebRTC (WHEP) playback with play/pause, picture-in-picture, and live stats
-- **Command palette** — `⌘K` / `Ctrl+K` to jump to pages or find paths and recordings by name
+- **Copy all URLs** — the copy-link control on a path can copy every protocol URL (RTSP/RTMP/HLS/WebRTC/SRT) at once
+- **Command palette** — `⌘K` / `Ctrl+K` to jump to pages or find paths and recordings by name; the open query stays in sync with the URL bar
 - **Keyboard shortcuts** — `g` then `p`/`r`/`c`/`h` jumps to Path Status / Recordings / System Config / Dashboard; `?` shows the reference
-- **Recent activity & notifications** — Session-scoped header log of admin actions plus path online/offline alerts and degradation alerts (inbound frame errors), with optional opt-in desktop notifications for those transitions
-- **Read-only detection** — if the API answers writes with 403, a banner appears and save/delete controls disable
+- **Recent activity & notifications** — Session-scoped header log of admin actions plus path online/offline alerts and degradation alerts (inbound frame errors), with optional opt-in desktop notifications for those transitions and a configurable threshold for sustained-offline follow-ups
+- **API sign-in & read-only detection** — if the API answers 401 a sign-in dialog appears (HTTP Basic or bearer token, persisted per browser); if it answers writes with 403 a banner appears and save/delete controls disable
 - **Theme & layout** — Light/dark theme; top navigation that becomes a mobile slide-over below 1024px
 - **Live list controls** — Auto-refresh toggles with interval (5s/15s/30s), last-updated hints, theme-aware toasts, and list error banners with retry
-- **Testing** — Vitest unit tests (48 cases) for stream URLs, recording playback, stream health, and path notifications
+- **Testing** — Vitest unit tests (68 cases) for stream URLs, recording playback, stream health, path notifications, CSV export escaping, path-config forms, and credential redaction
 
 ## Version History
 
-### v2.3.1 — 2026-08-18 (latest)
+### v2.4.0 — 2026-08-25 (latest)
+
+- **Multiple server profiles** — manage several MediaMTX instances from one UI and switch from the header; each profile can override the API endpoint and the host used when building stream and playback URLs
+- **API sign-in** — when the API answers 401 a sign-in dialog appears; supports HTTP Basic (username & password) and bearer tokens (JWT), persisted per browser origin
+- **Dashboard** — a connections-over-time trend with peak and a top-paths-by-traffic leaderboard alongside the persistent bandwidth trend
+- **Path traffic sparklines** — per-path historical traffic shown inline in Path Status, surviving reloads
+- **Recording activity heatmap** — 26-week calendar with click-to-filter days and a bulk delete for the filtered segment range
+- **System Config** — field search that jumps to a setting, a syntax-highlighted raw JSON editor, and config backup/restore with a key-level diff preview
+- **Path Config bulk edit** — select multiple paths and apply shared changes (source, auth, recording, limits) in one dialog
+- **Command palette** — full-list path and recording search with the open query synced to the URL bar
+- **Keyboard shortcuts** — `g` then `p`/`r`/`c`/`h` for Paths/Recordings/Config/Dashboard, `?` for the reference, `⌘K`/`Ctrl+K` for the palette
+- **Notifications** — a configurable sustained-offline threshold and new alerts when paths start/stop reporting inbound frame errors
+- **Copy all URLs** — copy every protocol URL for a path at once
+- **SPA deep links** — Caddy `try_files` fallback documented so reloads and deep links work behind a reverse proxy
+- **Hardening** — the JSON editor escapes everything it renders, CSV exports guard against formula injection, and credentials are redacted in exports
+- **Accessibility** — reduced-motion support, visible focus states, and live-region announcements
+- **Tests** — 68 unit tests
+
+### v2.3.1 — 2026-08-18
 
 - **Forward drawer fixes** — live status no longer shows another path's data between opens, live-status failures (e.g. an offline path) show a quiet inline hint instead of an error banner, the table no longer flashes its loading mask on every auto-refresh tick, and the add/edit dialog closes with the drawer
 - **Tests** — unit coverage for the credential-redaction payload logic (MediaMTX 1.20.1)
@@ -204,8 +224,8 @@ Compatibility notes:
 
 ## Security & Deployment Notes
 
-- **Auth is the deployment's job.** This UI has no login; whoever can reach it controls MediaMTX (config saves, kicks, deletions). Put it behind a reverse proxy with auth (e.g. Caddy Basic auth or a forward-auth gateway) in anything but a trusted LAN.
-- **API bearer token.** If you front the MediaMTX API with auth, you can set a token once per session via `setApiToken()` (from `src/api/index.ts`); every request then carries `Authorization: Bearer <token>`. There's no login screen — wire it into your own loader or gate.
+- **Auth is the deployment's job.** The UI can sign in to the API (see below), but whoever can reach it still controls MediaMTX (config saves, kicks, deletions). Put it behind a reverse proxy with auth (e.g. Caddy Basic auth or a forward-auth gateway) in anything but a trusted LAN.
+- **API sign-in.** If the MediaMTX API requires auth, the UI shows a sign-in dialog on the first 401 (or via the lock button in the header), supporting HTTP Basic (username & password) and bearer tokens (JWT), persisted per browser origin. `setApiAuth()` / `setApiToken()` from `src/api/index.ts` remain available for deployments that issue credentials externally.
 - **CSP.** `index.html` ships a Content-Security-Policy meta tag (`script-src 'self'`, `object-src 'none'`, etc.). For clickjacking protection (`frame-ancestors`) and strict `connect-src`, set headers at the edge instead — the in-app CSP must keep `connect-src` open because playback reaches MediaMTX protocol ports directly.
 - **Credentials on screen.** MediaMTX only redacts `*Pass` fields; path `source` URLs and forward `dest` URLs that embed `user:password@` are masked for display and in CSV exports by the app. Avoid screenshotting or sharing the Path Config page with source URLs visible.
 - **Dev servers.** The Vite dev server (`host: true`) and `mediamtx-dev.yml` (`apiAllowOrigins: ['*']`) are intentionally open for LAN development — don't reuse them for production.
